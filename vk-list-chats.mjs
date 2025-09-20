@@ -1,0 +1,174 @@
+#!/usr/bin/env bun
+
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+import { VKClient } from './vk.lib.mjs';
+
+class VKChatLister {
+  constructor() {
+    try {
+      this.client = new VKClient();
+    } catch (error) {
+      console.error(`❌ ${error.message}`);
+      console.log('💡 Set VK_ACCESS_TOKEN in .env file or as environment variable');
+      process.exit(1);
+    }
+  }
+
+  async getGroupChats(options = {}) {
+    try {
+      console.log('🔍 Fetching group chats...\n');
+      
+      // Get conversations
+      const conversations = await this.client.getConversations({
+        count: options.limit || 200,
+        offset: options.offset || 0,
+        fields: 'photo_100,members_count'
+      });
+
+      const chats = conversations.items.filter(item => 
+        item.conversation.peer.type === 'chat'
+      );
+
+      if (chats.length === 0) {
+        console.log('No group chats found');
+        return [];
+      }
+
+      console.log(`Found ${chats.length} group chat(s):\n`);
+      
+      const chatList = [];
+      
+      for (const item of chats) {
+        const chat = item.conversation;
+        const chatInfo = {
+          id: chat.peer.local_id,
+          title: chat.chat_settings?.title || 'Unnamed chat',
+          members: chat.chat_settings?.members_count || 0,
+          admin: chat.chat_settings?.owner_id,
+          photo: chat.chat_settings?.photo?.photo_100,
+          canWrite: chat.can_write?.allowed || false,
+          lastMessage: item.last_message?.text?.substring(0, 50)
+        };
+        
+        chatList.push(chatInfo);
+        
+        if (options.verbose) {
+          console.log(`📋 Chat ID: ${chatInfo.id}`);
+          console.log(`   Title: ${chatInfo.title}`);
+          console.log(`   Members: ${chatInfo.members}`);
+          console.log(`   Can write: ${chatInfo.canWrite ? '✅' : '❌'}`);
+          if (chatInfo.lastMessage) {
+            console.log(`   Last message: ${chatInfo.lastMessage}...`);
+          }
+          console.log();
+        } else {
+          console.log(`• [${chatInfo.id}] ${chatInfo.title} (${chatInfo.members} members)`);
+        }
+      }
+      
+      if (options.json) {
+        console.log('\nJSON output:');
+        console.log(JSON.stringify(chatList, null, 2));
+      }
+      
+      return chatList;
+    } catch (error) {
+      console.error('❌ Failed to fetch chats:', error.message);
+      if (error.code === 5) {
+        console.log('💡 Make sure your VK access token has messages permission');
+      }
+      throw error;
+    }
+  }
+
+  async getChatDetails(chatId) {
+    try {
+      console.log(`🔍 Fetching details for chat ${chatId}...\n`);
+      
+      const peerId = 2000000000 + parseInt(chatId);
+      const conversation = await this.client.getConversationById(peerId);
+
+      if (!conversation.items || conversation.items.length === 0) {
+        console.log('Chat not found');
+        return null;
+      }
+
+      const chat = conversation.items[0];
+      const members = await this.client.getConversationMembers(
+        peerId,
+        'first_name,last_name,screen_name'
+      );
+
+      console.log(`📋 Chat: ${chat.chat_settings?.title || 'Unnamed'}`);
+      console.log(`   ID: ${chatId}`);
+      console.log(`   Members: ${chat.chat_settings?.members_count || 0}`);
+      console.log(`   Created by: ${chat.chat_settings?.owner_id}`);
+      console.log(`   State: ${chat.chat_settings?.state || 'active'}`);
+      
+      if (members.items && members.items.length > 0) {
+        console.log('\n👥 Members:');
+        for (const member of members.items.slice(0, 10)) {
+          const user = members.profiles?.find(p => p.id === member.member_id);
+          if (user) {
+            console.log(`   • ${user.first_name} ${user.last_name} (@${user.screen_name || user.id})`);
+          }
+        }
+        if (members.items.length > 10) {
+          console.log(`   ... and ${members.items.length - 10} more`);
+        }
+      }
+
+      return {
+        chat,
+        members: members.items
+      };
+    } catch (error) {
+      console.error('❌ Failed to fetch chat details:', error.message);
+      throw error;
+    }
+  }
+}
+
+const argv = yargs(hideBin(process.argv))
+  .scriptName('vk-list-chats')
+  .usage('$0 [options]')
+  .command('$0', 'List all VK group chats', {}, async (argv) => {
+    const lister = new VKChatLister();
+    await lister.getGroupChats(argv);
+  })
+  .command('details <chatId>', 'Get details for a specific chat', {
+    chatId: {
+      describe: 'Chat ID to get details for',
+      type: 'number'
+    }
+  }, async (argv) => {
+    const lister = new VKChatLister();
+    await lister.getChatDetails(argv.chatId);
+  })
+  .option('verbose', {
+    alias: 'v',
+    describe: 'Show detailed information',
+    type: 'boolean',
+    default: false
+  })
+  .option('json', {
+    alias: 'j',
+    describe: 'Output as JSON',
+    type: 'boolean',
+    default: false
+  })
+  .option('limit', {
+    alias: 'l',
+    describe: 'Maximum number of chats to fetch',
+    type: 'number',
+    default: 200
+  })
+  .option('offset', {
+    alias: 'o',
+    describe: 'Offset for pagination',
+    type: 'number',
+    default: 0
+  })
+  .help()
+  .argv;

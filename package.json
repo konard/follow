@@ -1,0 +1,26 @@
+{
+  "name": "follow",
+  "version": "1.0.0",
+  "description": "A tool to follow telegram channels and manage VK/Telegram groups",
+  "type": "module",
+  "scripts": {
+    "vk-list": "bun run vk-list-chats.mjs",
+    "telegram-join": "bun run telegram-join-group.mjs",
+    "test-session": "bun run test-session.mjs"
+  },
+  "dependencies": {
+    "@dotenvx/dotenvx": "^1.50.1",
+    "dotenv": "^17.2.2",
+    "getenv": "^1.0.0",
+    "log-lazy": "^1.0.2",
+    "readline-sync": "^1.4.10",
+    "telegram": "^2.26.22",
+    "vk-io": "^4.9.0",
+    "yargs": "^17.7.2"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "author": "",
+  "license": "Unlicense"
+}
