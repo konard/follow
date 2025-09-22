@@ -188,6 +188,13 @@ export class TelegramUserClient {
   }
 
   parseInviteLink(link) {
+    // Handle private channel message links (t.me/c/CHANNEL_ID/MESSAGE_ID)
+    const privateChannelPattern = /t\.me\/c\/(\d+)(?:\/\d+)?/;
+    const privateChannelMatch = link.match(privateChannelPattern);
+    if (privateChannelMatch) {
+      return { type: 'private_channel', channelId: privateChannelMatch[1] };
+    }
+
     const patterns = [
       /t\.me\/joinchat\/([A-Za-z0-9_-]+)/,
       /t\.me\/\+([A-Za-z0-9_-]+)/,

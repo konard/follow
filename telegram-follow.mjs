@@ -10,6 +10,12 @@ class TelegramFollower {
     this.client = new TelegramUserClient();
   }
 
+  // Utility function for delays
+  async sleep(seconds) {
+    const ms = seconds * 1000;
+    await new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   parseLinksNotation(input) {
     // Parse Links Notation format using the standard parser
     const parser = new LinoParser();
@@ -53,6 +59,7 @@ class TelegramFollower {
         // First, get all current dialogs to check membership
         console.log('📋 Fetching current groups and channels...');
         const dialogs = await this.client.getDialogs();
+        await this.sleep(0.5); // Small delay after API call
         const currentGroups = new Set();
         
         // Build a set of current group usernames and IDs
@@ -93,6 +100,9 @@ class TelegramFollower {
             if (parsed.type === 'public' && currentGroups.has(parsed.username.toLowerCase())) {
               console.log(`  ℹ️  Already a member of @${parsed.username}`);
               results.alreadyMember.push(link);
+              
+              // Add small delay between checks to avoid rate limiting
+              await this.sleep(0.5);
               continue;
             }
             
@@ -101,14 +111,38 @@ class TelegramFollower {
               // Join via invite link
               console.log(`  📨 Joining via private invite...`);
               await this.client.importChatInvite(parsed.hash);
+              await this.sleep(0.5); // Delay after API call
               console.log(`  ✅ Successfully joined!`);
               results.joined.push(link);
+            } else if (parsed.type === 'private_channel') {
+              // Handle private channel links (t.me/c/CHANNEL_ID/MESSAGE_ID)
+              console.log(`  📨 Joining private channel ${parsed.channelId}...`);
+              
+              try {
+                // Convert channel ID to proper format (add -100 prefix for channels)
+                const channelPeerId = `-100${parsed.channelId}`;
+                const channel = await this.client.getEntity(parseInt(channelPeerId));
+                await this.sleep(0.5); // Delay after API call
+                
+                // Check if we're already in the channel
+                console.log(`  ℹ️  Already a member of private channel`);
+                results.alreadyMember.push(link);
+                await this.sleep(0.5); // Small delay between checks
+              } catch (error) {
+                if (error.message.includes('CHANNEL_PRIVATE') || error.message.includes('CHANNEL_INVALID')) {
+                  console.log(`  ❌ Cannot join - private channel (need invite link)`);
+                  results.failed.push({ link, error: 'Private channel - need invite link' });
+                } else {
+                  throw error;
+                }
+              }
             } else {
               // Join public channel/group
               console.log(`  📢 Joining @${parsed.username}...`);
               
               // Resolve the username to get the channel
               const resolvedPeer = await this.client.resolveUsername(parsed.username);
+              await this.sleep(0.5); // Delay after API call
               
               if (!resolvedPeer.chats || resolvedPeer.chats.length === 0) {
                 console.log(`  ❌ Group not found`);
@@ -118,15 +152,15 @@ class TelegramFollower {
               
               const channel = resolvedPeer.chats[0];
               await this.client.joinChannel(channel);
+              await this.sleep(0.5); // Delay after API call
               console.log(`  ✅ Successfully joined @${parsed.username}!`);
               results.joined.push(link);
             }
             
             // Add delay to avoid rate limiting
             if (options.delay && i < links.length - 1) {
-              const delayMs = options.delay * 1000;
-              console.log(`  ⏳ Waiting ${options.delay}s before next join...`);
-              await new Promise(resolve => setTimeout(resolve, delayMs));
+              console.log(`  ⏳ Waiting ${options.delay}s before next link...`);
+              await this.sleep(options.delay);
             }
             
           } catch (error) {
@@ -134,6 +168,7 @@ class TelegramFollower {
             
             if (error.message.includes('USER_ALREADY_PARTICIPANT')) {
               results.alreadyMember.push(link);
+              await this.sleep(0.5); // Small delay after error
             } else if (error.message.includes('INVITE_HASH_EXPIRED')) {
               results.failed.push({ link, error: 'Invite link expired' });
             } else if (error.message.includes('CHANNELS_TOO_MUCH')) {
