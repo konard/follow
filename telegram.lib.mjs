@@ -50,25 +50,49 @@ export class TelegramUserClient {
   }
 
   async connect() {
-    const apiId = this.apiId || readlineSync.question('Enter your Telegram API ID: ');
-    const apiHash = this.apiHash || readlineSync.question('Enter your Telegram API Hash: ');
-    
-    if (!apiId || !apiHash) {
-      throw new Error('API ID and API Hash are required. Get them from https://my.telegram.org');
-    }
-
-    const stringSession = new StringSession(this.session);
-    
-    if (this.session) {
+    // Check if we have a session
+    if (!this.session) {
+      console.error('❌ TELEGRAM_USER_SESSION is not set in .env file');
+      console.log('💡 To set up Telegram authentication:');
+      console.log('   1. Set TELEGRAM_USER_BOT_API_ID and TELEGRAM_USER_BOT_API_HASH in .env');
+      console.log('   2. Run the script again to authenticate and save the session');
+      console.log('   Get your API credentials from https://my.telegram.org');
+      
+      // Check if we have API credentials for initial auth
+      const apiId = this.apiId || readlineSync.question('Enter your Telegram API ID: ');
+      const apiHash = this.apiHash || readlineSync.question('Enter your Telegram API Hash: ');
+      
+      if (!apiId || !apiHash) {
+        throw new Error('API ID and API Hash are required for initial authentication');
+      }
+      
+      const stringSession = new StringSession(this.session);
+      this.client = new TelegramClient(
+        stringSession, 
+        parseInt(apiId, 10), 
+        apiHash, 
+        { connectionRetries: 5 }
+      );
+    } else {
+      // We have a session - check if API credentials are available
+      if (!this.apiId || !this.apiHash) {
+        console.error('❌ TELEGRAM_USER_BOT_API_ID and TELEGRAM_USER_BOT_API_HASH are not set in .env file');
+        console.log('💡 Even with an existing session, API credentials are required.');
+        console.log('   Please set these environment variables in your .env file:');
+        console.log('   TELEGRAM_USER_BOT_API_ID=your_api_id');
+        console.log('   TELEGRAM_USER_BOT_API_HASH=your_api_hash');
+        throw new Error('Missing required environment variables');
+      }
+      
       this.log.debug('✅ Using existing session from configuration');
+      const stringSession = new StringSession(this.session);
+      this.client = new TelegramClient(
+        stringSession, 
+        parseInt(this.apiId, 10), 
+        this.apiHash, 
+        { connectionRetries: 5 }
+      );
     }
-    
-    this.client = new TelegramClient(
-      stringSession, 
-      parseInt(apiId, 10), 
-      apiHash, 
-      { connectionRetries: 5 }
-    );
 
     const isNewSession = !this.session;
 

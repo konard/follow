@@ -1,0 +1,260 @@
+#!/usr/bin/env node
+
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+import { TelegramUserClient } from './telegram.lib.mjs';
+import { Parser as LinoParser } from '@linksplatform/protocols-lino';
+
+class TelegramFollower {
+  constructor() {
+    this.client = new TelegramUserClient();
+  }
+
+  parseLinksNotation(input) {
+    // Parse Links Notation format using the standard parser
+    const parser = new LinoParser();
+    const parsed = parser.parse(input);
+    
+    if (parsed && parsed.length > 0) {
+      const link = parsed[0];
+      const links = [];
+      
+      // If link has values, extract them
+      if (link.values && link.values.length > 0) {
+        for (const value of link.values) {
+          const linkStr = value.id || value;
+          if (typeof linkStr === 'string') {
+            links.push(linkStr);
+          }
+        }
+      } else if (link.id) {
+        // Single link case
+        links.push(link.id);
+      }
+      
+      return links;
+    }
+    
+    return [];
+  }
+
+  async followLinks(links, options = {}) {
+    try {
+      console.log(`🔍 Processing ${links.length} Telegram link(s)...\n`);
+      
+      const results = {
+        joined: [],
+        alreadyMember: [],
+        failed: [],
+        invalid: []
+      };
+      
+      await this.client.withConnection(async () => {
+        // First, get all current dialogs to check membership
+        console.log('📋 Fetching current groups and channels...');
+        const dialogs = await this.client.getDialogs();
+        const currentGroups = new Set();
+        
+        // Build a set of current group usernames and IDs
+        for (const dialog of dialogs) {
+          if (dialog.isChannel || dialog.isGroup) {
+            const entity = dialog.entity;
+            if (entity.username) {
+              currentGroups.add(entity.username.toLowerCase());
+            }
+          }
+        }
+        
+        console.log(`Found ${currentGroups.size} existing group(s)\n`);
+        
+        // Process each link
+        for (let i = 0; i < links.length; i++) {
+          const link = links[i];
+          const progress = `[${i + 1}/${links.length}]`;
+          
+          // Normalize the link
+          let normalizedLink = link.trim();
+          if (!normalizedLink.startsWith('http')) {
+            normalizedLink = `https://${normalizedLink}`;
+          }
+          
+          console.log(`${progress} Processing: ${link}`);
+          
+          try {
+            const parsed = this.client.parseInviteLink(normalizedLink);
+            
+            if (!parsed) {
+              console.log(`  ❌ Invalid link format`);
+              results.invalid.push(link);
+              continue;
+            }
+            
+            // Check if already a member (for public groups)
+            if (parsed.type === 'public' && currentGroups.has(parsed.username.toLowerCase())) {
+              console.log(`  ℹ️  Already a member of @${parsed.username}`);
+              results.alreadyMember.push(link);
+              continue;
+            }
+            
+            // Try to join
+            if (parsed.type === 'private') {
+              // Join via invite link
+              console.log(`  📨 Joining via private invite...`);
+              await this.client.importChatInvite(parsed.hash);
+              console.log(`  ✅ Successfully joined!`);
+              results.joined.push(link);
+            } else {
+              // Join public channel/group
+              console.log(`  📢 Joining @${parsed.username}...`);
+              
+              // Resolve the username to get the channel
+              const resolvedPeer = await this.client.resolveUsername(parsed.username);
+              
+              if (!resolvedPeer.chats || resolvedPeer.chats.length === 0) {
+                console.log(`  ❌ Group not found`);
+                results.failed.push({ link, error: 'Group not found' });
+                continue;
+              }
+              
+              const channel = resolvedPeer.chats[0];
+              await this.client.joinChannel(channel);
+              console.log(`  ✅ Successfully joined @${parsed.username}!`);
+              results.joined.push(link);
+            }
+            
+            // Add delay to avoid rate limiting
+            if (options.delay && i < links.length - 1) {
+              const delayMs = options.delay * 1000;
+              console.log(`  ⏳ Waiting ${options.delay}s before next join...`);
+              await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+            
+          } catch (error) {
+            console.log(`  ❌ Failed: ${error.message}`);
+            
+            if (error.message.includes('USER_ALREADY_PARTICIPANT')) {
+              results.alreadyMember.push(link);
+            } else if (error.message.includes('INVITE_HASH_EXPIRED')) {
+              results.failed.push({ link, error: 'Invite link expired' });
+            } else if (error.message.includes('CHANNELS_TOO_MUCH')) {
+              results.failed.push({ link, error: 'Too many channels joined' });
+              console.log('\n⚠️  Reached Telegram limit for channels. Stopping...');
+              break;
+            } else if (error.message.includes('FLOOD_WAIT')) {
+              const waitTime = parseInt(error.message.match(/\d+/)?.[0] || '60');
+              results.failed.push({ link, error: `Rate limited (wait ${waitTime}s)` });
+              console.log(`\n⚠️  Rate limited by Telegram. Please wait ${waitTime} seconds before continuing.`);
+              if (!options.skipRateLimit) {
+                break;
+              }
+            } else {
+              results.failed.push({ link, error: error.message });
+            }
+          }
+        }
+      });
+      
+      // Print summary
+      console.log('\n' + '='.repeat(50));
+      console.log('📊 SUMMARY');
+      console.log('='.repeat(50));
+      
+      if (results.joined.length > 0) {
+        console.log(`\n✅ Successfully joined (${results.joined.length}):`);
+        if (options.verbose) {
+          results.joined.forEach(link => console.log(`  • ${link}`));
+        }
+      }
+      
+      if (results.alreadyMember.length > 0) {
+        console.log(`\nℹ️  Already a member (${results.alreadyMember.length}):`);
+        if (options.verbose) {
+          results.alreadyMember.forEach(link => console.log(`  • ${link}`));
+        }
+      }
+      
+      if (results.failed.length > 0) {
+        console.log(`\n❌ Failed to join (${results.failed.length}):`);
+        results.failed.forEach(item => {
+          console.log(`  • ${item.link}`);
+          if (options.verbose) {
+            console.log(`    Reason: ${item.error}`);
+          }
+        });
+      }
+      
+      if (results.invalid.length > 0) {
+        console.log(`\n⚠️  Invalid links (${results.invalid.length}):`);
+        if (options.verbose) {
+          results.invalid.forEach(link => console.log(`  • ${link}`));
+        }
+      }
+      
+      console.log(`\n📈 Total processed: ${links.length}`);
+      console.log(`   Joined: ${results.joined.length}`);
+      console.log(`   Already member: ${results.alreadyMember.length}`);
+      console.log(`   Failed: ${results.failed.length}`);
+      console.log(`   Invalid: ${results.invalid.length}`);
+      
+      if (options.json) {
+        console.log('\n📄 JSON output:');
+        console.log(JSON.stringify(results, null, 2));
+      }
+      
+      return results;
+      
+    } catch (error) {
+      console.error('❌ Failed to process links:', error.message);
+      throw error;
+    }
+  }
+}
+
+yargs(hideBin(process.argv))
+  .scriptName('telegram-follow')
+  .usage('$0 <links> [options]')
+  .command('$0 <links>', 'Follow multiple Telegram channels/groups', {
+    links: {
+      describe: 'Telegram links in Links Notation format or space-separated',
+      type: 'string',
+      demandOption: true,
+      coerce: (input) => {
+        // Parse Links Notation input using the standard parser
+        const follower = new TelegramFollower();
+        return follower.parseLinksNotation(input);
+      }
+    }
+  }, async (argv) => {
+    const follower = new TelegramFollower();
+    await follower.followLinks(argv.links, argv);
+  })
+  .option('delay', {
+    alias: 'd',
+    describe: 'Delay in seconds between joins (to avoid rate limiting)',
+    type: 'number',
+    default: 2
+  })
+  .option('verbose', {
+    alias: 'v',
+    describe: 'Show detailed information',
+    type: 'boolean',
+    default: false
+  })
+  .option('json', {
+    alias: 'j',
+    describe: 'Output results as JSON',
+    type: 'boolean',
+    default: false
+  })
+  .option('skip-rate-limit', {
+    alias: 's',
+    describe: 'Continue processing even if rate limited',
+    type: 'boolean',
+    default: false
+  })
+  .help()
+  .example('$0 "(t.me/channel1 t.me/channel2)"', 'Follow channels using Links Notation')
+  .example('./vk-extract-telegram-links.mjs "(1163)" --incoming-only | ./telegram-follow.mjs', 'Pipe from VK extractor')
+  .example('$0 "(t.me/channel1 t.me/channel2)" --delay 5', 'Follow with 5 second delay')
+  .example('$0 "(telegramLinks: t.me/channel1 t.me/channel2)" --verbose', 'Named Links Notation')
+  .argv;
