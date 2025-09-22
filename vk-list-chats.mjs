@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
@@ -26,9 +26,18 @@ class VKChatLister {
         fields: 'photo_100,members_count'
       });
 
-      const chats = conversations.items.filter(item => 
+      let chats = conversations.items.filter(item => 
         item.conversation.peer.type === 'chat'
       );
+
+      // Apply Telegram filter if requested
+      if (options.filterTelegramChats) {
+        const telegramKeywords = ['telegram', 'телеграм', 'тг'];
+        chats = chats.filter(item => {
+          const title = (item.conversation.chat_settings?.title || '').toLowerCase();
+          return telegramKeywords.some(keyword => title.includes(keyword));
+        });
+      }
 
       if (chats.length === 0) {
         console.log('No group chats found');
@@ -169,6 +178,11 @@ const argv = yargs(hideBin(process.argv))
     describe: 'Offset for pagination',
     type: 'number',
     default: 0
+  })
+  .option('filter-telegram-chats', {
+    describe: 'Show only chats with Telegram/ТГ/Телеграм in the name',
+    type: 'boolean',
+    default: false
   })
   .help()
   .argv;
