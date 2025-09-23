@@ -119,15 +119,24 @@ class TelegramFollower {
               if (options.mute || options.archive) {
                 const chat = joinResult.chats ? joinResult.chats[0] : null;
                 if (chat) {
-                  if (options.mute) {
-                    console.log(`  🔇 Muting notifications...`);
-                    await this.client.updateNotificationSettings(chat, true);
-                    await this.sleep(0.3);
+                  try {
+                    if (options.mute) {
+                      console.log(`  🔇 Muting notifications...`);
+                      await this.client.updateNotificationSettings(chat, true);
+                      await this.sleep(0.3);
+                    }
+                  } catch (muteError) {
+                    console.log(`  ⚠️  Failed to mute: ${muteError.message}`);
                   }
-                  if (options.archive) {
-                    console.log(`  📦 Archiving chat...`);
-                    await this.client.editFolder(chat, 1); // Folder 1 is archive
-                    await this.sleep(0.3);
+                  
+                  try {
+                    if (options.archive) {
+                      console.log(`  📦 Archiving chat...`);
+                      await this.client.editFolder(chat, 1); // Folder 1 is archive
+                      await this.sleep(0.3);
+                    }
+                  } catch (archiveError) {
+                    console.log(`  ⚠️  Failed to archive: ${archiveError.message}`);
                   }
                 }
               }
@@ -175,15 +184,24 @@ class TelegramFollower {
               
               // Apply mute and archive settings if requested
               if (options.mute || options.archive) {
-                if (options.mute) {
-                  console.log(`  🔇 Muting notifications...`);
-                  await this.client.updateNotificationSettings(channel, true);
-                  await this.sleep(0.3);
+                try {
+                  if (options.mute) {
+                    console.log(`  🔇 Muting notifications...`);
+                    await this.client.updateNotificationSettings(channel, true);
+                    await this.sleep(0.3);
+                  }
+                } catch (muteError) {
+                  console.log(`  ⚠️  Failed to mute: ${muteError.message}`);
                 }
-                if (options.archive) {
-                  console.log(`  📦 Archiving chat...`);
-                  await this.client.editFolder(channel, 1); // Folder 1 is archive
-                  await this.sleep(0.3);
+                
+                try {
+                  if (options.archive) {
+                    console.log(`  📦 Archiving chat...`);
+                    await this.client.editFolder(channel, 1); // Folder 1 is archive
+                    await this.sleep(0.3);
+                  }
+                } catch (archiveError) {
+                  console.log(`  ⚠️  Failed to archive: ${archiveError.message}`);
                 }
               }
             }

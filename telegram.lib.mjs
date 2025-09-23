@@ -187,6 +187,37 @@ export class TelegramUserClient {
     );
   }
 
+  async updateNotificationSettings(peer, mute) {
+    // Mute notifications for a peer (channel/chat)
+    // Use MUTE_FOREVER for permanent mute (2147483647 seconds = ~68 years)
+    const muteUntil = mute ? 2147483647 : 0;
+    
+    return await this.invoke(
+      new Api.account.UpdateNotifySettings({
+        peer: new Api.InputNotifyPeer({ peer }),
+        settings: new Api.InputPeerNotifySettings({
+          muteUntil,
+          showPreviews: !mute,
+          silent: mute
+        })
+      })
+    );
+  }
+
+  async editFolder(peer, folderId) {
+    // Move a chat to a folder (0 = main folder, 1 = archive)
+    return await this.invoke(
+      new Api.folders.EditPeerFolders({
+        folderPeers: [
+          new Api.InputFolderPeer({
+            peer,
+            folderId
+          })
+        ]
+      })
+    );
+  }
+
   parseInviteLink(link) {
     // Handle private channel message links (t.me/c/CHANNEL_ID/MESSAGE_ID)
     const privateChannelPattern = /t\.me\/c\/(\d+)(?:\/\d+)?/;
