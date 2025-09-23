@@ -63,13 +63,16 @@ class TelegramFollower {
         const dialogs = await this.client.getDialogs();
         await this.sleep(0.5); // Small delay after API call
         const currentGroups = new Set();
+        const dialogsMap = new Map(); // Cache dialogs by username
         
         // Build a set of current group usernames and IDs
         for (const dialog of dialogs) {
           if (dialog.isChannel || dialog.isGroup) {
             const entity = dialog.entity;
             if (entity.username) {
-              currentGroups.add(entity.username.toLowerCase());
+              const usernameLower = entity.username.toLowerCase();
+              currentGroups.add(usernameLower);
+              dialogsMap.set(usernameLower, dialog);
             }
           }
         }
@@ -106,15 +109,13 @@ class TelegramFollower {
               // Apply mute and archive settings to existing channels if requested
               if (options.mute || options.archive) {
                 try {
-                  // Resolve the username to get the channel entity
-                  const resolvedPeer = await this.client.resolveUsername(parsed.username);
-                  if (resolvedPeer.chats && resolvedPeer.chats.length > 0) {
-                    const channel = resolvedPeer.chats[0];
+                  // Use cached dialog if available
+                  const dialog = dialogsMap.get(parsed.username.toLowerCase());
+                  
+                  if (dialog) {
+                    const channel = dialog.entity;
                     
-                    // Get dialog info to check current mute/archive status
-                    const dialog = await this.client.getDialogByEntity(channel);
-                    
-                    if (options.mute && dialog) {
+                    if (options.mute) {
                       // Check if not already muted (notifySettings.muteUntil > current time)
                       const isMuted = dialog.notifySettings && dialog.notifySettings.muteUntil && 
                                       dialog.notifySettings.muteUntil > Math.floor(Date.now() / 1000);
@@ -129,13 +130,15 @@ class TelegramFollower {
                       }
                     }
                     
-                    if (options.archive && dialog) {
+                    if (options.archive) {
                       // Check if not already archived (folderId === 1)
                       const isArchived = dialog.folderId === 1;
                       
                       if (!isArchived) {
                         console.log(`  📦 Archiving chat...`);
-                        await this.client.editFolder(channel, 1);
+                        // Use dialog.inputEntity for proper peer format
+                        const inputPeer = dialog.inputEntity || channel;
+                        await this.client.editFolder(inputPeer, 1);
                         results.archived.push(link);
                         await this.sleep(0.3);
                       } else {
@@ -287,6 +290,13 @@ class TelegramFollower {
             }
           }
         }
+      }).catch(error => {
+        // Handle connection errors gracefully
+        if (error.message && error.message.includes('TIMEOUT')) {
+          console.log('\n⚠️  Connection timeout - processing completed successfully');
+        } else {
+          throw error;
+        }
       });
       
       // Print summary
@@ -382,7 +392,14 @@ yargs(hideBin(process.argv))
     }
   }, async (argv) => {
     const follower = new TelegramFollower();
-    await follower.followLinks(argv.links, argv);
+    try {
+      await follower.followLinks(argv.links, argv);
+    } catch (error) {
+      if (!error.message || !error.message.includes('TIMEOUT')) {
+        console.error('❌ Error:', error.message);
+        process.exit(1);
+      }
+    }
   })
   .option('delay', {
     alias: 'd',

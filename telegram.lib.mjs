@@ -218,9 +218,10 @@ export class TelegramUserClient {
     );
   }
 
-  async getDialogByEntity(entity) {
+  async getDialogByEntity(entity, cachedDialogs = null) {
     // Get dialog (conversation) info for a specific entity
-    const dialogs = await this.getDialogs();
+    // Use cached dialogs if provided to avoid repeated API calls
+    const dialogs = cachedDialogs || await this.getDialogs();
     for (const dialog of dialogs) {
       if (dialog.entity && entity.id) {
         if (dialog.entity.id.toString() === entity.id.toString()) {
