@@ -218,6 +218,21 @@ export class TelegramUserClient {
     );
   }
 
+  async getNotifySettings(peer) {
+    // Get notification settings for a specific peer
+    try {
+      const result = await this.invoke(
+        new Api.account.GetNotifySettings({
+          peer: new Api.InputNotifyPeer({ peer })
+        })
+      );
+      return result;
+    } catch (error) {
+      console.log(`  ⚠️  Failed to get notify settings: ${error.message}`);
+      return null;
+    }
+  }
+
   async getDialogByEntity(entity, cachedDialogs = null) {
     // Get dialog (conversation) info for a specific entity
     // Use cached dialogs if provided to avoid repeated API calls

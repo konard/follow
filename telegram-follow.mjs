@@ -117,30 +117,46 @@ class TelegramFollower {
                   if (dialog) {
                     const channel = dialog.entity;
                     
-                    if (options.mute) {
-                      // Check if not already muted
-                      // muteUntil can be:
-                      // - undefined/null/0: not muted
-                      // - -1 or 2147483647: muted forever
-                      // - timestamp > current time: muted until that time
-                      const muteUntil = dialog.notifySettings?.muteUntil;
+                    if (options.mute && !options.skipMute) {
+                      // Fetch notification settings for this channel
+                      const notifySettings = await this.client.getNotifySettings(channel);
+                      await this.sleep(0.2); // Small delay to avoid rate limits
+                      
+                      let muteUntil = null;
+                      if (notifySettings) {
+                        muteUntil = notifySettings.muteUntil;
+                      }
+                      
                       const currentTime = Math.floor(Date.now() / 1000);
                       
                       if (options.debug) {
                         console.log(`    Debug: muteUntil=${muteUntil}, currentTime=${currentTime}`);
                       }
                       
+                      // Check if already muted
                       const isMuted = muteUntil && (muteUntil === -1 || muteUntil === 2147483647 || muteUntil > currentTime);
                       
                       if (!isMuted) {
-                        console.log(`  🔇 Muting notifications...`);
-                        await this.client.updateNotificationSettings(channel, true);
-                        results.muted.push(link);
-                        await this.sleep(0.3);
+                        try {
+                          console.log(`  🔇 Muting notifications...`);
+                          await this.client.updateNotificationSettings(channel, true);
+                          results.muted.push(link);
+                          await this.sleep(0.5); // Longer delay to avoid rate limits
+                        } catch (muteError) {
+                          if (muteError.message.includes('A wait of')) {
+                            const waitTime = muteError.message.match(/\d+/)?.[0] || '?';
+                            console.log(`  ⚠️  Rate limited - wait ${waitTime}s (stopping mute operations)`);
+                            options.skipMute = true; // Skip further mute operations
+                          } else {
+                            console.log(`  ⚠️  Failed to mute: ${muteError.message}`);
+                          }
+                        }
                       } else {
                         console.log(`  ℹ️  Already muted`);
                         results.alreadyMuted.push(link);
                       }
+                    } else if (options.mute && options.skipMute) {
+                      console.log(`  ⏭️  Skipping mute (rate limited)`);
                     }
                     
                     if (options.archive) {
@@ -184,14 +200,22 @@ class TelegramFollower {
                 const chat = joinResult.chats ? joinResult.chats[0] : null;
                 if (chat) {
                   try {
-                    if (options.mute) {
+                    if (options.mute && !options.skipMute) {
                       console.log(`  🔇 Muting notifications...`);
                       await this.client.updateNotificationSettings(chat, true);
                       results.muted.push(link);
-                      await this.sleep(0.3);
+                      await this.sleep(0.5);
+                    } else if (options.mute && options.skipMute) {
+                      console.log(`  ⏭️  Skipping mute (rate limited)`);
                     }
                   } catch (muteError) {
-                    console.log(`  ⚠️  Failed to mute: ${muteError.message}`);
+                    if (muteError.message.includes('A wait of')) {
+                      const waitTime = muteError.message.match(/\d+/)?.[0] || '?';
+                      console.log(`  ⚠️  Rate limited - wait ${waitTime}s (stopping mute operations)`);
+                      options.skipMute = true;
+                    } else {
+                      console.log(`  ⚠️  Failed to mute: ${muteError.message}`);
+                    }
                   }
                   
                   try {
@@ -251,14 +275,22 @@ class TelegramFollower {
               // Apply mute and archive settings if requested
               if (options.mute || options.archive) {
                 try {
-                  if (options.mute) {
+                  if (options.mute && !options.skipMute) {
                     console.log(`  🔇 Muting notifications...`);
                     await this.client.updateNotificationSettings(channel, true);
                     results.muted.push(link);
-                    await this.sleep(0.3);
+                    await this.sleep(0.5);
+                  } else if (options.mute && options.skipMute) {
+                    console.log(`  ⏭️  Skipping mute (rate limited)`);
                   }
                 } catch (muteError) {
-                  console.log(`  ⚠️  Failed to mute: ${muteError.message}`);
+                  if (muteError.message.includes('A wait of')) {
+                    const waitTime = muteError.message.match(/\d+/)?.[0] || '?';
+                    console.log(`  ⚠️  Rate limited - wait ${waitTime}s (stopping mute operations)`);
+                    options.skipMute = true;
+                  } else {
+                    console.log(`  ⚠️  Failed to mute: ${muteError.message}`);
+                  }
                 }
                 
                 try {
