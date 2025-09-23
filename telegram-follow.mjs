@@ -54,7 +54,9 @@ class TelegramFollower {
         failed: [],
         invalid: [],
         muted: [],
-        archived: []
+        alreadyMuted: [],
+        archived: [],
+        alreadyArchived: []
       };
       
       await this.client.withConnection(async () => {
@@ -116,9 +118,19 @@ class TelegramFollower {
                     const channel = dialog.entity;
                     
                     if (options.mute) {
-                      // Check if not already muted (notifySettings.muteUntil > current time)
-                      const isMuted = dialog.notifySettings && dialog.notifySettings.muteUntil && 
-                                      dialog.notifySettings.muteUntil > Math.floor(Date.now() / 1000);
+                      // Check if not already muted
+                      // muteUntil can be:
+                      // - undefined/null/0: not muted
+                      // - -1 or 2147483647: muted forever
+                      // - timestamp > current time: muted until that time
+                      const muteUntil = dialog.notifySettings?.muteUntil;
+                      const currentTime = Math.floor(Date.now() / 1000);
+                      
+                      if (options.debug) {
+                        console.log(`    Debug: muteUntil=${muteUntil}, currentTime=${currentTime}`);
+                      }
+                      
+                      const isMuted = muteUntil && (muteUntil === -1 || muteUntil === 2147483647 || muteUntil > currentTime);
                       
                       if (!isMuted) {
                         console.log(`  🔇 Muting notifications...`);
@@ -127,6 +139,7 @@ class TelegramFollower {
                         await this.sleep(0.3);
                       } else {
                         console.log(`  ℹ️  Already muted`);
+                        results.alreadyMuted.push(link);
                       }
                     }
                     
@@ -143,6 +156,7 @@ class TelegramFollower {
                         await this.sleep(0.3);
                       } else {
                         console.log(`  ℹ️  Already archived`);
+                        results.alreadyArchived.push(link);
                       }
                     }
                   }
@@ -356,10 +370,12 @@ class TelegramFollower {
       console.log(`   Invalid: ${results.invalid.length}`);
       
       if (options.mute) {
-        console.log(`   Muted: ${results.muted.length}`);
+        console.log(`   Newly muted: ${results.muted.length}`);
+        console.log(`   Already muted: ${results.alreadyMuted.length}`);
       }
       if (options.archive) {
-        console.log(`   Archived: ${results.archived.length}`);
+        console.log(`   Newly archived: ${results.archived.length}`);
+        console.log(`   Already archived: ${results.alreadyArchived.length}`);
       }
       
       if (options.json) {
@@ -434,6 +450,11 @@ yargs(hideBin(process.argv))
   .option('archive', {
     alias: 'a',
     describe: 'Archive joined channels/groups',
+    type: 'boolean',
+    default: false
+  })
+  .option('debug', {
+    describe: 'Show debug information about mute/archive status',
     type: 'boolean',
     default: false
   })
