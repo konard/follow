@@ -110,10 +110,27 @@ class TelegramFollower {
             if (parsed.type === 'private') {
               // Join via invite link
               console.log(`  📨 Joining via private invite...`);
-              await this.client.importChatInvite(parsed.hash);
+              const joinResult = await this.client.importChatInvite(parsed.hash);
               await this.sleep(0.5); // Delay after API call
               console.log(`  ✅ Successfully joined!`);
               results.joined.push(link);
+              
+              // Apply mute and archive settings if requested
+              if (options.mute || options.archive) {
+                const chat = joinResult.chats ? joinResult.chats[0] : null;
+                if (chat) {
+                  if (options.mute) {
+                    console.log(`  🔇 Muting notifications...`);
+                    await this.client.updateNotificationSettings(chat, true);
+                    await this.sleep(0.3);
+                  }
+                  if (options.archive) {
+                    console.log(`  📦 Archiving chat...`);
+                    await this.client.editFolder(chat, 1); // Folder 1 is archive
+                    await this.sleep(0.3);
+                  }
+                }
+              }
             } else if (parsed.type === 'private_channel') {
               // Handle private channel links (t.me/c/CHANNEL_ID/MESSAGE_ID)
               console.log(`  📨 Joining private channel ${parsed.channelId}...`);
@@ -155,6 +172,20 @@ class TelegramFollower {
               await this.sleep(0.5); // Delay after API call
               console.log(`  ✅ Successfully joined @${parsed.username}!`);
               results.joined.push(link);
+              
+              // Apply mute and archive settings if requested
+              if (options.mute || options.archive) {
+                if (options.mute) {
+                  console.log(`  🔇 Muting notifications...`);
+                  await this.client.updateNotificationSettings(channel, true);
+                  await this.sleep(0.3);
+                }
+                if (options.archive) {
+                  console.log(`  📦 Archiving chat...`);
+                  await this.client.editFolder(channel, 1); // Folder 1 is archive
+                  await this.sleep(0.3);
+                }
+              }
             }
             
             // Add delay to avoid rate limiting
@@ -287,9 +318,22 @@ yargs(hideBin(process.argv))
     type: 'boolean',
     default: false
   })
+  .option('mute', {
+    alias: 'm',
+    describe: 'Mute notifications for joined channels/groups',
+    type: 'boolean',
+    default: false
+  })
+  .option('archive', {
+    alias: 'a',
+    describe: 'Archive joined channels/groups',
+    type: 'boolean',
+    default: false
+  })
   .help()
   .example('$0 "(t.me/channel1 t.me/channel2)"', 'Follow channels using Links Notation')
   .example('./vk-extract-telegram-links.mjs "(1163)" --incoming-only | ./telegram-follow.mjs', 'Pipe from VK extractor')
   .example('$0 "(t.me/channel1 t.me/channel2)" --delay 5', 'Follow with 5 second delay')
   .example('$0 "(telegramLinks: t.me/channel1 t.me/channel2)" --verbose', 'Named Links Notation')
+  .example('$0 "(t.me/channel1)" --mute --archive', 'Follow, mute and archive channel')
   .argv;

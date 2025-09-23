@@ -15,6 +15,13 @@ class VKChatLister {
     }
   }
 
+  formatLinksNotationArray(chatIds) {
+    // Format as Links Notation with proper indentation
+    if (chatIds.length === 0) return '()';
+    const formattedIds = chatIds.map(id => `  ${id}`).join('\n');
+    return `(\n${formattedIds}\n)`;
+  }
+
   async getGroupChats(options = {}) {
     try {
       console.log('🔍 Fetching group chats...\n');
@@ -80,6 +87,11 @@ class VKChatLister {
         console.log('\nJSON output:');
         console.log(JSON.stringify(chatList, null, 2));
       }
+      
+      // Always output chat IDs in Links Notation format
+      const chatIds = chatList.map(chat => chat.id);
+      console.log('\n📄 Links Notation output:');
+      console.log(this.formatLinksNotationArray(chatIds));
       
       return chatList;
     } catch (error) {
