@@ -218,6 +218,19 @@ export class TelegramUserClient {
     );
   }
 
+  async getDialogByEntity(entity) {
+    // Get dialog (conversation) info for a specific entity
+    const dialogs = await this.getDialogs();
+    for (const dialog of dialogs) {
+      if (dialog.entity && entity.id) {
+        if (dialog.entity.id.toString() === entity.id.toString()) {
+          return dialog;
+        }
+      }
+    }
+    return null;
+  }
+
   parseInviteLink(link) {
     // Handle private channel message links (t.me/c/CHANNEL_ID/MESSAGE_ID)
     const privateChannelPattern = /t\.me\/c\/(\d+)(?:\/\d+)?/;

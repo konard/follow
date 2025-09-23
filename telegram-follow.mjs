@@ -52,7 +52,9 @@ class TelegramFollower {
         joined: [],
         alreadyMember: [],
         failed: [],
-        invalid: []
+        invalid: [],
+        muted: [],
+        archived: []
       };
       
       await this.client.withConnection(async () => {
@@ -101,6 +103,51 @@ class TelegramFollower {
               console.log(`  ℹ️  Already a member of @${parsed.username}`);
               results.alreadyMember.push(link);
               
+              // Apply mute and archive settings to existing channels if requested
+              if (options.mute || options.archive) {
+                try {
+                  // Resolve the username to get the channel entity
+                  const resolvedPeer = await this.client.resolveUsername(parsed.username);
+                  if (resolvedPeer.chats && resolvedPeer.chats.length > 0) {
+                    const channel = resolvedPeer.chats[0];
+                    
+                    // Get dialog info to check current mute/archive status
+                    const dialog = await this.client.getDialogByEntity(channel);
+                    
+                    if (options.mute && dialog) {
+                      // Check if not already muted (notifySettings.muteUntil > current time)
+                      const isMuted = dialog.notifySettings && dialog.notifySettings.muteUntil && 
+                                      dialog.notifySettings.muteUntil > Math.floor(Date.now() / 1000);
+                      
+                      if (!isMuted) {
+                        console.log(`  🔇 Muting notifications...`);
+                        await this.client.updateNotificationSettings(channel, true);
+                        results.muted.push(link);
+                        await this.sleep(0.3);
+                      } else {
+                        console.log(`  ℹ️  Already muted`);
+                      }
+                    }
+                    
+                    if (options.archive && dialog) {
+                      // Check if not already archived (folderId === 1)
+                      const isArchived = dialog.folderId === 1;
+                      
+                      if (!isArchived) {
+                        console.log(`  📦 Archiving chat...`);
+                        await this.client.editFolder(channel, 1);
+                        results.archived.push(link);
+                        await this.sleep(0.3);
+                      } else {
+                        console.log(`  ℹ️  Already archived`);
+                      }
+                    }
+                  }
+                } catch (error) {
+                  console.log(`  ⚠️  Failed to mute/archive: ${error.message}`);
+                }
+              }
+              
               // Add small delay between checks to avoid rate limiting
               await this.sleep(0.5);
               continue;
@@ -123,6 +170,7 @@ class TelegramFollower {
                     if (options.mute) {
                       console.log(`  🔇 Muting notifications...`);
                       await this.client.updateNotificationSettings(chat, true);
+                      results.muted.push(link);
                       await this.sleep(0.3);
                     }
                   } catch (muteError) {
@@ -133,6 +181,7 @@ class TelegramFollower {
                     if (options.archive) {
                       console.log(`  📦 Archiving chat...`);
                       await this.client.editFolder(chat, 1); // Folder 1 is archive
+                      results.archived.push(link);
                       await this.sleep(0.3);
                     }
                   } catch (archiveError) {
@@ -188,6 +237,7 @@ class TelegramFollower {
                   if (options.mute) {
                     console.log(`  🔇 Muting notifications...`);
                     await this.client.updateNotificationSettings(channel, true);
+                    results.muted.push(link);
                     await this.sleep(0.3);
                   }
                 } catch (muteError) {
@@ -198,6 +248,7 @@ class TelegramFollower {
                   if (options.archive) {
                     console.log(`  📦 Archiving chat...`);
                     await this.client.editFolder(channel, 1); // Folder 1 is archive
+                    results.archived.push(link);
                     await this.sleep(0.3);
                   }
                 } catch (archiveError) {
@@ -274,11 +325,32 @@ class TelegramFollower {
         }
       }
       
+      if (results.muted.length > 0) {
+        console.log(`\n🔇 Muted (${results.muted.length}):`);
+        if (options.verbose) {
+          results.muted.forEach(link => console.log(`  • ${link}`));
+        }
+      }
+      
+      if (results.archived.length > 0) {
+        console.log(`\n📦 Archived (${results.archived.length}):`);
+        if (options.verbose) {
+          results.archived.forEach(link => console.log(`  • ${link}`));
+        }
+      }
+      
       console.log(`\n📈 Total processed: ${links.length}`);
       console.log(`   Joined: ${results.joined.length}`);
       console.log(`   Already member: ${results.alreadyMember.length}`);
       console.log(`   Failed: ${results.failed.length}`);
       console.log(`   Invalid: ${results.invalid.length}`);
+      
+      if (options.mute) {
+        console.log(`   Muted: ${results.muted.length}`);
+      }
+      if (options.archive) {
+        console.log(`   Archived: ${results.archived.length}`);
+      }
       
       if (options.json) {
         console.log('\n📄 JSON output:');
