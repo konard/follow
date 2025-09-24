@@ -16,6 +16,24 @@ class TelegramFollower {
     await new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  // Archive with retry mechanism for newly joined channels
+  async archiveWithRetry(entity, link, results, maxRetries = 3) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await this.client.editFolder(entity, 1); // Folder 1 is archive
+        results.archived.push(link);
+        return; // Success
+      } catch (error) {
+        if (error.message.includes('PEER_ID_INVALID') && attempt < maxRetries) {
+          console.log(`  ⏳ Archive attempt ${attempt} failed, retrying in 3s...`);
+          await this.sleep(3);
+        } else {
+          throw error; // Re-throw if it's the last attempt or different error
+        }
+      }
+    }
+  }
+
   parseLinksNotation(input) {
     // Parse Links Notation format using the standard parser
     const parser = new LinoParser();
@@ -221,8 +239,7 @@ class TelegramFollower {
                   try {
                     if (options.archive) {
                       console.log(`  📦 Archiving chat...`);
-                      await this.client.editFolder(chat, 1); // Folder 1 is archive
-                      results.archived.push(link);
+                      await this.archiveWithRetry(chat, link, results);
                       await this.sleep(0.3);
                     }
                   } catch (archiveError) {
@@ -296,8 +313,7 @@ class TelegramFollower {
                 try {
                   if (options.archive) {
                     console.log(`  📦 Archiving chat...`);
-                    await this.client.editFolder(channel, 1); // Folder 1 is archive
-                    results.archived.push(link);
+                    await this.archiveWithRetry(channel, link, results);
                     await this.sleep(0.3);
                   }
                 } catch (archiveError) {
