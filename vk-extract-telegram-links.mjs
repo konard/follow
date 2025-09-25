@@ -4,6 +4,9 @@ import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { VKClient } from './vk.lib.mjs';
 import { Parser as LinoParser } from '@linksplatform/protocols-lino';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 class TelegramLinkExtractor {
   constructor() {
@@ -53,6 +56,21 @@ class TelegramLinkExtractor {
     if (links.length === 0) return '()';
     const formattedLinks = links.map(link => `  ${link}`).join('\n');
     return `(\n${formattedLinks}\n)`;
+  }
+
+  async saveToCache(links) {
+    const cacheDir = path.join(os.homedir(), '.follow');
+    const cacheFile = path.join(cacheDir, 'telegram-links.lino');
+    
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(cacheDir)) {
+      fs.mkdirSync(cacheDir, { recursive: true });
+    }
+    
+    // Save the Links Notation output
+    const linksNotation = this.formatLinksNotationArray(Array.from(links).sort());
+    fs.writeFileSync(cacheFile, linksNotation);
+    console.log(`\n💾 Saved to cache: ${cacheFile}`);
   }
 
   extractTelegramLinks(text) {
@@ -242,6 +260,9 @@ class TelegramLinkExtractor {
       console.log('\n📄 Links Notation output:');
       console.log(this.formatLinksNotationArray(sortedLinks));
       
+      // Save to cache
+      await this.saveToCache(allLinks);
+      
       return allLinks;
       
     } catch (error) {
@@ -256,13 +277,24 @@ class TelegramLinkExtractor {
 
 yargs(hideBin(process.argv))
   .scriptName('vk-extract-telegram-links')
-  .usage('$0 <chatIds> [options]')
-  .command('$0 <chatIds>', 'Extract unique Telegram links from specified VK chat IDs', {
+  .usage('$0 [chatIds] [options]')
+  .command('$0 [chatIds]', 'Extract unique Telegram links from specified VK chat IDs', {
     chatIds: {
-      describe: 'Chat IDs to extract links from (supports Links Notation)',
+      describe: 'Chat IDs to extract links from (supports Links Notation). If not provided, uses cached vk-chats.lino',
       type: 'string',
-      demandOption: true,
       coerce: (input) => {
+        // If no input provided, try to use cached file
+        if (!input) {
+          const cacheFile = path.join(os.homedir(), '.follow', 'vk-chats.lino');
+          if (fs.existsSync(cacheFile)) {
+            console.log(`📂 Using cached chat IDs from: ${cacheFile}\n`);
+            input = fs.readFileSync(cacheFile, 'utf8');
+          } else {
+            console.error(`❌ No chat IDs provided and cache file not found: ${cacheFile}`);
+            console.log('💡 Run vk-list-chats.mjs first to create the cache file');
+            process.exit(1);
+          }
+        }
         // Parse Links Notation input using the standard parser
         const extractor = new TelegramLinkExtractor();
         return extractor.parseLinksNotation(input);
@@ -270,7 +302,21 @@ yargs(hideBin(process.argv))
     }
   }, async (argv) => {
     const extractor = new TelegramLinkExtractor();
-    await extractor.extractFromChatIds(argv.chatIds, argv);
+    // Handle case where no argument was provided
+    let chatIds = argv.chatIds;
+    if (!chatIds) {
+      const cacheFile = path.join(os.homedir(), '.follow', 'vk-chats.lino');
+      if (fs.existsSync(cacheFile)) {
+        console.log(`📂 Using cached chat IDs from: ${cacheFile}\n`);
+        const input = fs.readFileSync(cacheFile, 'utf8');
+        chatIds = extractor.parseLinksNotation(input);
+      } else {
+        console.error(`❌ No chat IDs provided and cache file not found: ${cacheFile}`);
+        console.log('💡 Run vk-list-chats.mjs first to create the cache file');
+        process.exit(1);
+      }
+    }
+    await extractor.extractFromChatIds(chatIds, argv);
   })
   .option('messages-per-chat', {
     alias: 'm',
@@ -303,9 +349,10 @@ yargs(hideBin(process.argv))
     default: false
   })
   .help()
+  .example('$0', 'Extract links using cached chat IDs from ~/.follow/vk-chats.lino')
   .example('$0 "1163 1158 1159 1162"', 'Extract links from 4 specific chats')
   .example('$0 "(1163 1158 1159 1162)"', 'Using Links Notation for chat IDs')
-  .example('$0 "1163 1158 1159 1162" --incoming-only', 'Extract only from incoming messages')
+  .example('$0 --incoming-only', 'Extract only from incoming messages using cached chats')
   .example('$0 "(1163 1158 1159 1162)" --incoming-only', 'Links Notation with incoming-only filter')
   .example('$0 "1163" --by-chat --verbose', 'Extract with message context grouped by chat')
   .example('$0 "1163 1158" -m 500 --json', 'Fetch 500 messages per chat and output as JSON')

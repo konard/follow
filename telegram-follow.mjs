@@ -4,6 +4,9 @@ import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { TelegramUserClient } from './telegram.lib.mjs';
 import { Parser as LinoParser } from '@linksplatform/protocols-lino';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 class TelegramFollower {
   constructor() {
@@ -442,13 +445,24 @@ class TelegramFollower {
 
 yargs(hideBin(process.argv))
   .scriptName('telegram-follow')
-  .usage('$0 <links> [options]')
-  .command('$0 <links>', 'Follow multiple Telegram channels/groups', {
+  .usage('$0 [links] [options]')
+  .command('$0 [links]', 'Follow multiple Telegram channels/groups', {
     links: {
-      describe: 'Telegram links in Links Notation format or space-separated',
+      describe: 'Telegram links in Links Notation format or space-separated. If not provided, uses cached telegram-links.lino',
       type: 'string',
-      demandOption: true,
       coerce: (input) => {
+        // If no input provided, try to use cached file
+        if (!input) {
+          const cacheFile = path.join(os.homedir(), '.follow', 'telegram-links.lino');
+          if (fs.existsSync(cacheFile)) {
+            console.log(`📂 Using cached links from: ${cacheFile}\n`);
+            input = fs.readFileSync(cacheFile, 'utf8');
+          } else {
+            console.error(`❌ No links provided and cache file not found: ${cacheFile}`);
+            console.log('💡 Run vk-extract-telegram-links.mjs first to create the cache file');
+            process.exit(1);
+          }
+        }
         // Parse Links Notation input using the standard parser
         const follower = new TelegramFollower();
         return follower.parseLinksNotation(input);
@@ -457,7 +471,21 @@ yargs(hideBin(process.argv))
   }, async (argv) => {
     const follower = new TelegramFollower();
     try {
-      await follower.followLinks(argv.links, argv);
+      // Handle case where no argument was provided
+      let links = argv.links;
+      if (!links) {
+        const cacheFile = path.join(os.homedir(), '.follow', 'telegram-links.lino');
+        if (fs.existsSync(cacheFile)) {
+          console.log(`📂 Using cached links from: ${cacheFile}\n`);
+          const input = fs.readFileSync(cacheFile, 'utf8');
+          links = follower.parseLinksNotation(input);
+        } else {
+          console.error(`❌ No links provided and cache file not found: ${cacheFile}`);
+          console.log('💡 Run vk-extract-telegram-links.mjs first to create the cache file');
+          process.exit(1);
+        }
+      }
+      await follower.followLinks(links, argv);
     } catch (error) {
       if (!error.message || !error.message.includes('TIMEOUT')) {
         console.error('❌ Error:', error.message);
@@ -507,6 +535,7 @@ yargs(hideBin(process.argv))
     default: false
   })
   .help()
+  .example('$0', 'Follow channels using cached links from ~/.follow/telegram-links.lino')
   .example('$0 "(t.me/channel1 t.me/channel2)"', 'Follow channels using Links Notation')
   .example('./vk-extract-telegram-links.mjs "(1163)" --incoming-only | ./telegram-follow.mjs', 'Pipe from VK extractor')
   .example('$0 "(t.me/channel1 t.me/channel2)" --delay 5', 'Follow with 5 second delay')

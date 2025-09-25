@@ -3,6 +3,9 @@
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { VKClient } from './vk.lib.mjs';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 class VKChatLister {
   constructor() {
@@ -20,6 +23,22 @@ class VKChatLister {
     if (chatIds.length === 0) return '()';
     const formattedIds = chatIds.map(id => `  ${id}`).join('\n');
     return `(\n${formattedIds}\n)`;
+  }
+
+  async saveToCache(chatIds) {
+    const cacheDir = path.join(os.homedir(), '.follow');
+    const cacheFile = path.join(cacheDir, 'vk-chats.lino');
+    
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(cacheDir)) {
+      fs.mkdirSync(cacheDir, { recursive: true });
+      console.log(`\n📁 Created cache directory: ${cacheDir}`);
+    }
+    
+    // Save the Links Notation output
+    const linksNotation = this.formatLinksNotationArray(chatIds);
+    fs.writeFileSync(cacheFile, linksNotation);
+    console.log(`💾 Saved to cache: ${cacheFile}`);
   }
 
   async getGroupChats(options = {}) {
@@ -92,6 +111,9 @@ class VKChatLister {
       const chatIds = chatList.map(chat => chat.id);
       console.log('\n📄 Links Notation output:');
       console.log(this.formatLinksNotationArray(chatIds));
+      
+      // Save to cache
+      await this.saveToCache(chatIds);
       
       return chatList;
     } catch (error) {
