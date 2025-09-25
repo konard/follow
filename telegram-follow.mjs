@@ -20,16 +20,35 @@ class TelegramFollower {
   }
 
   // Archive with retry mechanism for newly joined channels
-  async archiveWithRetry(entity, link, results, maxRetries = 3) {
+  async archiveWithRetry(entity, link, results, maxRetries = 5) {
+    const delays = [2, 5, 10, 15, 20]; // Exponential backoff delays in seconds
+    
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        await this.client.editFolder(entity, 1); // Folder 1 is archive
+        // On retry attempts, try to fetch the dialog to get a fresh entity
+        let entityToUse = entity;
+        if (attempt > 1) {
+          try {
+            // Try to fetch the dialog for this entity to ensure it's properly synced
+            const dialog = await this.client.getDialogByEntity(entity);
+            if (dialog && dialog.entity) {
+              entityToUse = dialog.entity;
+              console.log(`  🔄 Refreshed entity for archive attempt ${attempt}`);
+            }
+          } catch (fetchError) {
+            // If we can't fetch the dialog, continue with the original entity
+            console.log(`  ⚠️  Could not refresh entity: ${fetchError.message}`);
+          }
+        }
+        
+        await this.client.editFolder(entityToUse, 1); // Folder 1 is archive
         results.archived.push(link);
         return; // Success
       } catch (error) {
         if (error.message.includes('PEER_ID_INVALID') && attempt < maxRetries) {
-          console.log(`  ⏳ Archive attempt ${attempt} failed, retrying in 3s...`);
-          await this.sleep(3);
+          const delay = delays[attempt - 1] || 20;
+          console.log(`  ⏳ Archive attempt ${attempt} failed, retrying in ${delay}s...`);
+          await this.sleep(delay);
         } else {
           throw error; // Re-throw if it's the last attempt or different error
         }
@@ -242,6 +261,8 @@ class TelegramFollower {
                   try {
                     if (options.archive) {
                       console.log(`  📦 Archiving chat...`);
+                      // For newly joined channels, we need to ensure proper sync
+                      // Use the chat from the join result for archiving
                       await this.archiveWithRetry(chat, link, results);
                       await this.sleep(0.3);
                     }
@@ -316,7 +337,22 @@ class TelegramFollower {
                 try {
                   if (options.archive) {
                     console.log(`  📦 Archiving chat...`);
-                    await this.archiveWithRetry(channel, link, results);
+                    // For newly joined channels, we need to ensure proper sync
+                    // Try to get fresh entity before archiving
+                    let entityForArchive = channel;
+                    try {
+                      // Give Telegram a moment to sync
+                      await this.sleep(1);
+                      const freshDialog = await this.client.getDialogByEntity(channel);
+                      if (freshDialog && freshDialog.entity) {
+                        entityForArchive = freshDialog.entity;
+                        console.log(`  🔄 Using fresh entity for archiving`);
+                      }
+                    } catch (err) {
+                      // Continue with original entity if refresh fails
+                      console.log(`  ⚠️ Using original entity for archiving`);
+                    }
+                    await this.archiveWithRetry(entityForArchive, link, results);
                     await this.sleep(0.3);
                   }
                 } catch (archiveError) {
