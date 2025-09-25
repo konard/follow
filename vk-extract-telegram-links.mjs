@@ -3,10 +3,7 @@
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { VKClient } from './vk.lib.mjs';
-import { Parser as LinoParser } from '@linksplatform/protocols-lino';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import { lino, CACHE_FILES } from './lino.lib.mjs';
 
 class TelegramLinkExtractor {
   constructor() {
@@ -19,59 +16,6 @@ class TelegramLinkExtractor {
     }
   }
 
-  parseLinksNotation(input) {
-    // Parse Links Notation format using the standard parser
-    const parser = new LinoParser();
-    const parsed = parser.parse(input);
-    
-    if (parsed && parsed.length > 0) {
-      const link = parsed[0];
-      // Extract numbers from the link values
-      const ids = [];
-      
-      // If link has values, extract them
-      if (link.values && link.values.length > 0) {
-        for (const value of link.values) {
-          const num = parseInt(value.id || value);
-          if (!isNaN(num)) {
-            ids.push(num);
-          }
-        }
-      } else if (link.id) {
-        // Try to extract from the link id itself
-        const nums = link.id.match(/\d+/g);
-        if (nums) {
-          ids.push(...nums.map(n => parseInt(n)).filter(n => !isNaN(n)));
-        }
-      }
-      
-      return ids;
-    }
-    
-    return [];
-  }
-
-  formatLinksNotationArray(links) {
-    // Format as Links Notation with proper indentation
-    if (links.length === 0) return '()';
-    const formattedLinks = links.map(link => `  ${link}`).join('\n');
-    return `(\n${formattedLinks}\n)`;
-  }
-
-  async saveToCache(links) {
-    const cacheDir = path.join(os.homedir(), '.follow');
-    const cacheFile = path.join(cacheDir, 'telegram-links.lino');
-    
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(cacheDir)) {
-      fs.mkdirSync(cacheDir, { recursive: true });
-    }
-    
-    // Save the Links Notation output
-    const linksNotation = this.formatLinksNotationArray(Array.from(links).sort());
-    fs.writeFileSync(cacheFile, linksNotation);
-    console.log(`\n💾 Saved to cache: ${cacheFile}`);
-  }
 
   extractTelegramLinks(text) {
     if (!text) return [];
@@ -258,10 +202,11 @@ class TelegramLinkExtractor {
       
       // Always output in Links Notation format
       console.log('\n📄 Links Notation output:');
-      console.log(this.formatLinksNotationArray(sortedLinks));
+      console.log(lino.format(sortedLinks));
       
       // Save to cache
-      await this.saveToCache(allLinks);
+      const cacheFile = lino.saveToCache(CACHE_FILES.TELEGRAM_LINKS, sortedLinks);
+      console.log(`\n💾 Saved to cache: ${cacheFile}`);
       
       return allLinks;
       
@@ -285,19 +230,12 @@ yargs(hideBin(process.argv))
       coerce: (input) => {
         // If no input provided, try to use cached file
         if (!input) {
-          const cacheFile = path.join(os.homedir(), '.follow', 'vk-chats.lino');
-          if (fs.existsSync(cacheFile)) {
-            console.log(`📂 Using cached chat IDs from: ${cacheFile}\n`);
-            input = fs.readFileSync(cacheFile, 'utf8');
-          } else {
-            console.error(`❌ No chat IDs provided and cache file not found: ${cacheFile}`);
-            console.log('💡 Run vk-list-chats.mjs first to create the cache file');
-            process.exit(1);
-          }
+          const cache = lino.requireCache(CACHE_FILES.VK_CHATS, 
+            'No chat IDs provided and cache file not found.\n💡 Run vk-list-chats.mjs first to create the cache file');
+          return cache.numericIds;
         }
-        // Parse Links Notation input using the standard parser
-        const extractor = new TelegramLinkExtractor();
-        return extractor.parseLinksNotation(input);
+        // Parse Links Notation input
+        return lino.parseNumericIds(input);
       }
     }
   }, async (argv) => {
@@ -305,16 +243,9 @@ yargs(hideBin(process.argv))
     // Handle case where no argument was provided
     let chatIds = argv.chatIds;
     if (!chatIds) {
-      const cacheFile = path.join(os.homedir(), '.follow', 'vk-chats.lino');
-      if (fs.existsSync(cacheFile)) {
-        console.log(`📂 Using cached chat IDs from: ${cacheFile}\n`);
-        const input = fs.readFileSync(cacheFile, 'utf8');
-        chatIds = extractor.parseLinksNotation(input);
-      } else {
-        console.error(`❌ No chat IDs provided and cache file not found: ${cacheFile}`);
-        console.log('💡 Run vk-list-chats.mjs first to create the cache file');
-        process.exit(1);
-      }
+      const cache = lino.requireCache(CACHE_FILES.VK_CHATS, 
+        'No chat IDs provided and cache file not found.\n💡 Run vk-list-chats.mjs first to create the cache file');
+      chatIds = cache.numericIds;
     }
     await extractor.extractFromChatIds(chatIds, argv);
   })

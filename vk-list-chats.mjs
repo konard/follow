@@ -3,9 +3,7 @@
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { VKClient } from './vk.lib.mjs';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import { lino, CACHE_FILES } from './lino.lib.mjs';
 
 class VKChatLister {
   constructor() {
@@ -18,28 +16,6 @@ class VKChatLister {
     }
   }
 
-  formatLinksNotationArray(chatIds) {
-    // Format as Links Notation with proper indentation
-    if (chatIds.length === 0) return '()';
-    const formattedIds = chatIds.map(id => `  ${id}`).join('\n');
-    return `(\n${formattedIds}\n)`;
-  }
-
-  async saveToCache(chatIds) {
-    const cacheDir = path.join(os.homedir(), '.follow');
-    const cacheFile = path.join(cacheDir, 'vk-chats.lino');
-    
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(cacheDir)) {
-      fs.mkdirSync(cacheDir, { recursive: true });
-      console.log(`\n📁 Created cache directory: ${cacheDir}`);
-    }
-    
-    // Save the Links Notation output
-    const linksNotation = this.formatLinksNotationArray(chatIds);
-    fs.writeFileSync(cacheFile, linksNotation);
-    console.log(`💾 Saved to cache: ${cacheFile}`);
-  }
 
   async getGroupChats(options = {}) {
     try {
@@ -110,10 +86,11 @@ class VKChatLister {
       // Always output chat IDs in Links Notation format
       const chatIds = chatList.map(chat => chat.id);
       console.log('\n📄 Links Notation output:');
-      console.log(this.formatLinksNotationArray(chatIds));
+      console.log(lino.format(chatIds));
       
       // Save to cache
-      await this.saveToCache(chatIds);
+      const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, chatIds);
+      console.log(`💾 Saved to cache: ${cacheFile}`);
       
       return chatList;
     } catch (error) {
