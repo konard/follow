@@ -6,7 +6,7 @@ import readlineSync from 'readline-sync';
 import makeLog from 'log-lazy';
 
 // Load .env at module level
-dotenvx.config();
+dotenvx.config({ quiet: true });
 
 const { TelegramClient, Api } = telegram;
 const { StringSession } = telegram.sessions;

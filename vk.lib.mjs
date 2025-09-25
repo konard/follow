@@ -1,9 +1,9 @@
 import getenv from 'getenv';
-import * as dotenv from 'dotenv';
+import dotenvx from '@dotenvx/dotenvx';
 import { VK } from 'vk-io';
 import makeLog from 'log-lazy';
 
-dotenv.config();
+dotenvx.config({ quiet: true });
 
 export class VKClient {
   constructor(options = {}) {

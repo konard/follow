@@ -52,7 +52,7 @@ async function testSessionManagement() {
     }
     
     // Reload and check with dotenvx
-    dotenvx.config();
+    dotenvx.config({ quiet: true });
     
     const sessionFromDotenvx = dotenvx.get('TELEGRAM_USER_SESSION');
     if (sessionFromDotenvx === TEST_SESSION) {
@@ -84,7 +84,7 @@ async function testSessionManagement() {
     console.log('  ' + updatedEnv.trim().replace(/\n/g, '\n  '));
     
     // Reload and verify
-    dotenvx.config();
+    dotenvx.config({ quiet: true });
     const updatedFromDotenvx = dotenvx.get('TELEGRAM_USER_SESSION');
     
     if (updatedFromDotenvx === UPDATED_SESSION) {
@@ -119,7 +119,7 @@ async function testSessionManagement() {
     console.log('  ' + finalEnv.trim().replace(/\n/g, '\n  '));
     
     // Verify both values are preserved
-    dotenvx.config();
+    dotenvx.config({ quiet: true });
     const finalSession = dotenvx.get('TELEGRAM_USER_SESSION');
     const vkToken = dotenvx.get('VK_ACCESS_TOKEN');
     

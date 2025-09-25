@@ -11,7 +11,6 @@
   "dependencies": {
     "@dotenvx/dotenvx": "^1.50.1",
     "@linksplatform/protocols-lino": "^0.6.0",
-    "dotenv": "^17.2.2",
     "getenv": "^1.0.0",
     "log-lazy": "^1.0.2",
     "readline-sync": "^1.4.10",
