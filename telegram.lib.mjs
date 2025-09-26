@@ -206,11 +206,33 @@ export class TelegramUserClient {
 
   async editFolder(peer, folderId) {
     // Move a chat to a folder (0 = main folder, 1 = archive)
+    // Convert entity to InputPeer if needed
+    let inputPeer = peer;
+    
+    // If it's a regular entity (has className), convert to InputPeer
+    if (peer && peer.className) {
+      if (peer.className === 'Channel') {
+        inputPeer = new Api.InputPeerChannel({
+          channelId: peer.id,
+          accessHash: peer.accessHash
+        });
+      } else if (peer.className === 'Chat') {
+        inputPeer = new Api.InputPeerChat({
+          chatId: peer.id
+        });
+      } else if (peer.className === 'User') {
+        inputPeer = new Api.InputPeerUser({
+          userId: peer.id,
+          accessHash: peer.accessHash
+        });
+      }
+    }
+    
     return await this.invoke(
       new Api.folders.EditPeerFolders({
         folderPeers: [
           new Api.InputFolderPeer({
-            peer,
+            peer: inputPeer,
             folderId
           })
         ]

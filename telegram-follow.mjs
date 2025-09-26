@@ -17,37 +17,51 @@ class TelegramFollower {
   }
 
   // Archive with retry mechanism for newly joined channels
-  async archiveWithRetry(entity, link, results, maxRetries = 5) {
-    const delays = [2, 5, 10, 15, 20]; // Exponential backoff delays in seconds
+  async archiveWithRetry(entity, link, results, maxRetries = 3) {
+    const delays = [2, 5, 10]; // Exponential backoff delays in seconds
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        // On retry attempts, try to fetch the dialog to get a fresh entity
-        let entityToUse = entity;
-        if (attempt > 1) {
-          try {
-            // Try to fetch the dialog for this entity to ensure it's properly synced
-            const dialog = await this.client.getDialogByEntity(entity);
-            if (dialog && dialog.entity) {
-              entityToUse = dialog.entity;
-              console.log(`  🔄 Refreshed entity for archive attempt ${attempt}`);
-            }
-          } catch (fetchError) {
-            // If we can't fetch the dialog, continue with the original entity
-            console.log(`  ⚠️  Could not refresh entity: ${fetchError.message}`);
-          }
-        }
-        
-        await this.client.editFolder(entityToUse, 1); // Folder 1 is archive
+        // The editFolder method now handles entity conversion automatically
+        await this.client.editFolder(entity, 1); // Folder 1 is archive
         results.archived.push(link);
         return; // Success
       } catch (error) {
-        if (error.message.includes('PEER_ID_INVALID') && attempt < maxRetries) {
-          const delay = delays[attempt - 1] || 20;
-          console.log(`  ⏳ Archive attempt ${attempt} failed, retrying in ${delay}s...`);
-          await this.sleep(delay);
+        if (error.message.includes('PEER_ID_INVALID')) {
+          if (attempt < maxRetries) {
+            const delay = delays[attempt - 1] || 10;
+            console.log(`  ⏳ Archive attempt ${attempt} failed, retrying in ${delay}s...`);
+            await this.sleep(delay);
+            
+            // On retry, try to get fresh entity from dialogs
+            if (attempt === 2) {
+              try {
+                const dialogs = await this.client.getDialogs();
+                const dialog = dialogs.find(d => {
+                  if (d.entity && entity) {
+                    return d.entity.id === entity.id || 
+                           (entity.username && d.entity.username?.toLowerCase() === entity.username.toLowerCase());
+                  }
+                  return false;
+                });
+                if (dialog) {
+                  entity = dialog.inputEntity || dialog.entity;
+                  console.log(`  🔄 Using refreshed entity for retry`);
+                }
+              } catch (err) {
+                // Continue with original entity
+              }
+            }
+          } else {
+            throw error;
+          }
+        } else if (error.message.includes('FLOOD_WAIT')) {
+          const waitTime = parseInt(error.message.match(/\d+/)?.[0] || '30');
+          console.log(`  ⏳ Rate limited, waiting ${waitTime}s before retry...`);
+          await this.sleep(waitTime);
+          attempt--; // Don't count flood wait as an attempt
         } else {
-          throw error; // Re-throw if it's the last attempt or different error
+          throw error; // Re-throw for other errors
         }
       }
     }
@@ -231,10 +245,9 @@ class TelegramFollower {
                   try {
                     if (options.archive) {
                       console.log(`  📦 Archiving chat...`);
-                      // For newly joined channels, we need to ensure proper sync
-                      // Use the chat from the join result for archiving
+                      // Pass the chat entity directly, archiveWithRetry will handle getting fresh entity
                       await this.archiveWithRetry(chat, link, results);
-                      await this.sleep(0.3);
+                      await this.sleep(1); // Longer delay after archive operation
                     }
                   } catch (archiveError) {
                     console.log(`  ⚠️  Failed to archive: ${archiveError.message}`);
@@ -307,23 +320,9 @@ class TelegramFollower {
                 try {
                   if (options.archive) {
                     console.log(`  📦 Archiving chat...`);
-                    // For newly joined channels, we need to ensure proper sync
-                    // Try to get fresh entity before archiving
-                    let entityForArchive = channel;
-                    try {
-                      // Give Telegram a moment to sync
-                      await this.sleep(1);
-                      const freshDialog = await this.client.getDialogByEntity(channel);
-                      if (freshDialog && freshDialog.entity) {
-                        entityForArchive = freshDialog.entity;
-                        console.log(`  🔄 Using fresh entity for archiving`);
-                      }
-                    } catch (err) {
-                      // Continue with original entity if refresh fails
-                      console.log(`  ⚠️ Using original entity for archiving`);
-                    }
-                    await this.archiveWithRetry(entityForArchive, link, results);
-                    await this.sleep(0.3);
+                    // Pass the channel entity directly, archiveWithRetry will handle getting fresh entity
+                    await this.archiveWithRetry(channel, link, results);
+                    await this.sleep(1); // Longer delay after archive operation
                   }
                 } catch (archiveError) {
                   console.log(`  ⚠️  Failed to archive: ${archiveError.message}`);
@@ -345,17 +344,34 @@ class TelegramFollower {
               await this.sleep(0.5); // Small delay after error
             } else if (error.message.includes('INVITE_HASH_EXPIRED')) {
               results.failed.push({ link, error: 'Invite link expired' });
+            } else if (error.message.includes('INVITE_REQUEST_SENT')) {
+              results.failed.push({ link, error: 'Join request sent (approval required)' });
+            } else if (error.message.includes('USERNAME_NOT_OCCUPIED')) {
+              results.failed.push({ link, error: 'Channel/group does not exist' });
+            } else if (error.message.includes('USERNAME_INVALID')) {
+              results.failed.push({ link, error: 'Invalid username' });
+            } else if (error.message.includes('CHANNEL_PRIVATE')) {
+              results.failed.push({ link, error: 'Private channel (invite link required)' });
             } else if (error.message.includes('CHANNELS_TOO_MUCH')) {
               results.failed.push({ link, error: 'Too many channels joined' });
-              console.log('\n⚠️  Reached Telegram limit for channels. Stopping...');
+              console.log('\n⚠️  Reached Telegram limit for channels. Consider leaving some channels.');
+              console.log('💡 Tip: Use --archive to archive channels instead of leaving them');
               break;
             } else if (error.message.includes('FLOOD_WAIT')) {
               const waitTime = parseInt(error.message.match(/\d+/)?.[0] || '60');
               results.failed.push({ link, error: `Rate limited (wait ${waitTime}s)` });
               console.log(`\n⚠️  Rate limited by Telegram. Please wait ${waitTime} seconds before continuing.`);
               if (!options.skipRateLimit) {
+                console.log('💡 Use --skip-rate-limit to continue processing other links');
                 break;
+              } else {
+                console.log(`  ⏳ Waiting ${waitTime}s before continuing...`);
+                await this.sleep(waitTime);
               }
+            } else if (error.message.includes('USER_BANNED_IN_CHANNEL')) {
+              results.failed.push({ link, error: 'You are banned from this channel' });
+            } else if (error.message.includes('CHAT_RESTRICTED')) {
+              results.failed.push({ link, error: 'Chat is restricted' });
             } else {
               results.failed.push({ link, error: error.message });
             }
