@@ -127,13 +127,36 @@ class TelegramFollower {
               continue;
             }
             
-            // Check if already a member (for public groups)
-            if (parsed.type === 'public' && currentGroups.has(parsed.username.toLowerCase())) {
-              console.log(`  ℹ️  Already a member of @${parsed.username}`);
-              results.alreadyMember.push(link);
+            // For public channels, first check if the username exists
+            if (parsed.type === 'public') {
+              // Try to resolve the username first to check if it exists
+              let resolvedPeer;
+              try {
+                resolvedPeer = await this.client.resolveUsername(parsed.username);
+                await this.sleep(0.3); // Small delay after API call
+              } catch (resolveError) {
+                if (resolveError.message.includes('USERNAME_NOT_OCCUPIED')) {
+                  console.log(`  ❌ Channel/group @${parsed.username} does not exist`);
+                  results.failed.push({ link, error: 'Channel/group does not exist' });
+                  continue;
+                } else if (resolveError.message.includes('USERNAME_INVALID')) {
+                  console.log(`  ❌ Invalid username @${parsed.username}`);
+                  results.failed.push({ link, error: 'Invalid username' });
+                  continue;
+                }
+                // For other errors, log and continue
+                console.log(`  ❌ Failed to resolve @${parsed.username}: ${resolveError.message}`);
+                results.failed.push({ link, error: resolveError.message });
+                continue;
+              }
               
-              // Apply mute and archive settings to existing channels if requested
-              if (options.mute || options.archive) {
+              // Check if we're already a member
+              if (currentGroups.has(parsed.username.toLowerCase())) {
+                console.log(`  ℹ️  Already a member of @${parsed.username}`);
+                results.alreadyMember.push(link);
+                
+                // Apply mute and archive settings to existing channels if requested
+                if (options.mute || options.archive) {
                 try {
                   // Use cached dialog if available
                   const dialog = dialogsMap.get(parsed.username.toLowerCase());
@@ -204,10 +227,58 @@ class TelegramFollower {
                   console.log(`  ⚠️  Failed to mute/archive: ${error.message}`);
                 }
               }
+                
+                // Add small delay between checks to avoid rate limiting
+                await this.sleep(0.5);
+                continue;
+              }
               
-              // Add small delay between checks to avoid rate limiting
-              await this.sleep(0.5);
-              continue;
+              // Not a member yet, proceed to join
+              const channel = resolvedPeer.chats ? resolvedPeer.chats[0] : null;
+              if (!channel) {
+                console.log(`  ❌ Group not found`);
+                results.failed.push({ link, error: 'Group not found' });
+                continue;
+              }
+              
+              // Join the channel
+              await this.client.joinChannel(channel);
+              await this.sleep(0.5); // Delay after API call
+              console.log(`  ✅ Successfully joined @${parsed.username}!`);
+              results.joined.push(link);
+              
+              // Apply mute and archive settings if requested
+              if (options.mute || options.archive) {
+                try {
+                  if (options.mute && !options.skipMute) {
+                    console.log(`  🔇 Muting notifications...`);
+                    await this.client.updateNotificationSettings(channel, true);
+                    results.muted.push(link);
+                    await this.sleep(0.5);
+                  } else if (options.mute && options.skipMute) {
+                    console.log(`  ⏭️  Skipping mute (rate limited)`);
+                  }
+                } catch (muteError) {
+                  if (muteError.message.includes('A wait of')) {
+                    const waitTime = muteError.message.match(/\d+/)?.[0] || '?';
+                    console.log(`  ⚠️  Rate limited - wait ${waitTime}s (stopping mute operations)`);
+                    options.skipMute = true;
+                  } else {
+                    console.log(`  ⚠️  Failed to mute: ${muteError.message}`);
+                  }
+                }
+                
+                try {
+                  if (options.archive) {
+                    console.log(`  📦 Archiving chat...`);
+                    // Pass the channel entity directly, archiveWithRetry will handle getting fresh entity
+                    await this.archiveWithRetry(channel, link, results);
+                    await this.sleep(1); // Longer delay after archive operation
+                  }
+                } catch (archiveError) {
+                  console.log(`  ⚠️  Failed to archive: ${archiveError.message}`);
+                }
+              }
             }
             
             // Try to join
@@ -274,58 +345,6 @@ class TelegramFollower {
                   results.failed.push({ link, error: 'Private channel - need invite link' });
                 } else {
                   throw error;
-                }
-              }
-            } else {
-              // Join public channel/group
-              console.log(`  📢 Joining @${parsed.username}...`);
-              
-              // Resolve the username to get the channel
-              const resolvedPeer = await this.client.resolveUsername(parsed.username);
-              await this.sleep(0.5); // Delay after API call
-              
-              if (!resolvedPeer.chats || resolvedPeer.chats.length === 0) {
-                console.log(`  ❌ Group not found`);
-                results.failed.push({ link, error: 'Group not found' });
-                continue;
-              }
-              
-              const channel = resolvedPeer.chats[0];
-              await this.client.joinChannel(channel);
-              await this.sleep(0.5); // Delay after API call
-              console.log(`  ✅ Successfully joined @${parsed.username}!`);
-              results.joined.push(link);
-              
-              // Apply mute and archive settings if requested
-              if (options.mute || options.archive) {
-                try {
-                  if (options.mute && !options.skipMute) {
-                    console.log(`  🔇 Muting notifications...`);
-                    await this.client.updateNotificationSettings(channel, true);
-                    results.muted.push(link);
-                    await this.sleep(0.5);
-                  } else if (options.mute && options.skipMute) {
-                    console.log(`  ⏭️  Skipping mute (rate limited)`);
-                  }
-                } catch (muteError) {
-                  if (muteError.message.includes('A wait of')) {
-                    const waitTime = muteError.message.match(/\d+/)?.[0] || '?';
-                    console.log(`  ⚠️  Rate limited - wait ${waitTime}s (stopping mute operations)`);
-                    options.skipMute = true;
-                  } else {
-                    console.log(`  ⚠️  Failed to mute: ${muteError.message}`);
-                  }
-                }
-                
-                try {
-                  if (options.archive) {
-                    console.log(`  📦 Archiving chat...`);
-                    // Pass the channel entity directly, archiveWithRetry will handle getting fresh entity
-                    await this.archiveWithRetry(channel, link, results);
-                    await this.sleep(1); // Longer delay after archive operation
-                  }
-                } catch (archiveError) {
-                  console.log(`  ⚠️  Failed to archive: ${archiveError.message}`);
                 }
               }
             }
