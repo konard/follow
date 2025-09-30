@@ -129,6 +129,24 @@ Both commands include comprehensive error handling:
 - Network errors
 - Permission errors
 
+## Standard Command Sequence
+
+Follow this sequence for the complete workflow:
+
+```bash
+# 1. List VK chats to see what's available
+./vk-list-chats.mjs
+
+# 2. Extract Telegram links from VK chats (only incoming messages)
+./vk-extract-telegram-links.mjs --incoming-only
+
+# 3. Follow the extracted Telegram channels/groups (with mute and archive)
+./telegram-follow.mjs --mute --archive
+
+# 4. Send Telegram link back to VK chats
+./vk-send-telegram-link-to-chats.mjs
+```
+
 ## Example Workflow
 
 ```bash
