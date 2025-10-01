@@ -135,7 +135,7 @@ Follow this sequence for the complete workflow:
 
 ```bash
 # 1. List VK chats to see what's available
-./vk-list-chats.mjs
+./vk-list-chats.mjs --filter-telegram-chats
 
 # 2. Extract Telegram links from VK chats (only incoming messages)
 ./vk-extract-telegram-links.mjs --incoming-only

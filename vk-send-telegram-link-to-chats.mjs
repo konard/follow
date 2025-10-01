@@ -75,24 +75,52 @@ class TelegramLinkSender {
         await new Promise(resolve => setTimeout(resolve, checkInterval));
         checkCount++;
         
-        if (options.verbose) {
-          console.log(`🔄 Check #${checkCount} at ${new Date().toLocaleTimeString()}`);
+        // Count current status
+        let activeCount = 0;
+        let deletedCount = 0;
+        for (const info of this.sentMessages.values()) {
+          if (info.deleted) {
+            deletedCount++;
+          } else {
+            activeCount++;
+          }
         }
         
+        if (options.verbose) {
+          console.log(`🔄 Check #${checkCount} at ${new Date().toLocaleTimeString()} (Active: ${activeCount}, Deleted: ${deletedCount})`);
+        }
+        
+        // Only check messages that haven't been deleted yet
+        const messagesToCheck = [];
         for (const [messageId, info] of this.sentMessages.entries()) {
-          if (info.deleted) continue;
+          if (!info.deleted) {
+            messagesToCheck.push(messageId);
+          }
+        }
+        
+        if (messagesToCheck.length === 0) {
+          if (!options.verbose) {
+            console.log(`📊 All messages have been deleted. Ending monitoring early.`);
+          }
+          break;
+        }
+        
+        for (const messageId of messagesToCheck) {
+          const info = this.sentMessages.get(messageId);
           
           try {
             const messages = await this.client.vk.api.messages.getById({
               message_ids: messageId
             });
             
-            if (!messages.items || messages.items.length === 0) {
+            if (!messages.items || messages.items.length === 0 || 
+                messages.items[0]?.deleted === 1 || 
+                messages.items[0]?.is_unavailable === true) {
               info.deleted = true;
               const age = ((Date.now() - info.sentAt) / 1000).toFixed(1);
               console.log(`❌ Message ${messageId} deleted in [${info.chatId}] ${info.chatTitle} after ${age}s`);
             } else if (options.verbose) {
-              console.log(`✓ Message ${messageId} still exists in [${info.chatId}] ${info.chatTitle}`);
+              console.log(`  ✓ Message ${messageId} still exists in [${info.chatId}] ${info.chatTitle}`);
             }
           } catch (error) {
             if (error.code === 100) {
@@ -100,7 +128,7 @@ class TelegramLinkSender {
               const age = ((Date.now() - info.sentAt) / 1000).toFixed(1);
               console.log(`❌ Message ${messageId} deleted in [${info.chatId}] ${info.chatTitle} after ${age}s`);
             } else if (options.verbose) {
-              console.log(`⚠️ Error checking message ${messageId}: ${error.message}`);
+              console.log(`  ⚠️ Error checking message ${messageId}: ${error.message}`);
             }
           }
         }
