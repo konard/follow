@@ -89,7 +89,7 @@ class TelegramLinkExtractor {
           // Get message history for this chat
           const messages = await this.client.vk.api.messages.getHistory({
             peer_id: peerId,
-            count: options.messagesPerChat || 200,
+            count: options.messagesPerChat,
             offset: 0
           });
           

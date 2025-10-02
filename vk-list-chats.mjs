@@ -23,8 +23,8 @@ class VKChatLister {
       
       // Get conversations
       const conversations = await this.client.getConversations({
-        count: options.limit || 200,
-        offset: options.offset || 0,
+        count: options.limit,
+        offset: options.offset,
         fields: 'photo_100,members_count'
       });
 

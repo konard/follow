@@ -22,8 +22,8 @@ class TelegramLinkSender {
       console.log(`📤 Sending Telegram link to ${chatIds.length} chat(s)...`);
       console.log(`🔗 Link: ${telegramLink}\n`);
       
-      const monitorDuration = options.monitorDuration || 180000;
-      const checkInterval = options.checkInterval || 10000;
+      const monitorDuration = options.monitorDuration;
+      const checkInterval = options.checkInterval;
       
       for (const chatId of chatIds) {
         const peerId = 2000000000 + parseInt(chatId);
@@ -221,7 +221,7 @@ yargs(hideBin(process.argv))
     alias: 'i',
     describe: 'Interval between checks in milliseconds',
     type: 'number',
-    default: 10000
+    default: 30000
   })
   .option('delay', {
     describe: 'Delay between sending messages to different chats (in seconds)',
