@@ -215,7 +215,7 @@ yargs(hideBin(process.argv))
     alias: 'd',
     describe: 'Duration to monitor messages in milliseconds',
     type: 'number',
-    default: 180000
+    default: 200000
   })
   .option('check-interval', {
     alias: 'i',
