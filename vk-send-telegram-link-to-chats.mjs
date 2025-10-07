@@ -154,6 +154,42 @@ class TelegramLinkSender {
         survived.forEach(msg => {
           console.log(`   • [${msg.chatId}] ${msg.chatTitle} (message ID: ${msg.messageId})`);
         });
+
+        // Delete all incoming messages if option is enabled
+        if (options.deleteAllIncomingMessagesInChatOnSuccess) {
+          console.log(`\n🗑️  Deleting all incoming messages in chats where our message survived...`);
+
+          for (const msg of survived) {
+            try {
+              // Get conversation history
+              const history = await this.client.vk.api.messages.getHistory({
+                peer_id: msg.peerId,
+                count: 200
+              });
+
+              const messagesToDelete = [];
+              for (const message of history.items) {
+                // Delete only incoming messages (out: 0), not our own (out: 1)
+                if (message.out === 0) {
+                  messagesToDelete.push(message.id);
+                }
+              }
+
+              if (messagesToDelete.length > 0) {
+                // VK allows deleting multiple messages at once
+                await this.client.vk.api.messages.delete({
+                  message_ids: messagesToDelete.join(','),
+                  delete_for_all: 0 // Delete only for ourselves
+                });
+                console.log(`   ✅ Deleted ${messagesToDelete.length} incoming message(s) in [${msg.chatId}] ${msg.chatTitle}`);
+              } else {
+                console.log(`   ℹ️  No incoming messages to delete in [${msg.chatId}] ${msg.chatTitle}`);
+              }
+            } catch (error) {
+              console.error(`   ❌ Error deleting messages in [${msg.chatId}] ${msg.chatTitle}: ${error.message}`);
+            }
+          }
+        }
       }
       
       console.log(`\n❌ Deleted: ${deleted.length}/${this.sentMessages.size}`);
@@ -234,6 +270,11 @@ yargs(hideBin(process.argv))
     type: 'boolean',
     default: false
   })
+  .option('delete-all-incoming-messages-in-chat-on-success', {
+    describe: 'Delete all incoming messages in chats where our message survived after monitoring',
+    type: 'boolean',
+    default: false
+  })
   .help()
   .example('$0', 'Send https://t.me/gptDeep to cached chats and monitor for 3 minutes')
   .example('$0 --link https://t.me/myChannel', 'Send custom link to cached chats')
@@ -241,4 +282,5 @@ yargs(hideBin(process.argv))
   .example('$0 "(1163 1158)" --delay 2', 'Send with 2 second delay between chats')
   .example('$0 --monitor-duration 300000 --check-interval 15000', 'Monitor for 5 minutes, check every 15 seconds')
   .example('$0 --verbose', 'Show detailed monitoring information')
+  .example('$0 --delete-all-incoming-messages-in-chat-on-success', 'Delete incoming messages after successful monitoring')
   .argv;
