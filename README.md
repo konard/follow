@@ -144,7 +144,7 @@ Follow this sequence for the complete workflow:
 ./telegram-follow.mjs --mute --archive
 
 # 4. Send Telegram link back to VK chats
-./vk-send-telegram-link-to-chats.mjs
+./vk-send-telegram-link-to-chats.mjs --delete-all-incoming-messages-in-chat-on-success
 ```
 
 ## Example Workflow
