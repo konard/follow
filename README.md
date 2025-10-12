@@ -147,6 +147,12 @@ Follow this sequence for the complete workflow:
 ./vk-send-telegram-link-to-chats.mjs --delete-all-incoming-messages-in-chat-on-success
 ```
 
+Or all commands in one go:
+
+```
+./vk-list-chats.mjs --filter-telegram-chats && ./vk-extract-telegram-links.mjs --incoming-only && ./telegram-follow.mjs --mute --archive && ./vk-send-telegram-link-to-chats.mjs --delete-all-incoming-messages-in-chat-on-success
+```
+
 ## Example Workflow
 
 ```bash
