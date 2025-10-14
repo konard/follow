@@ -114,8 +114,19 @@ export class TelegramUserClient {
 
   async disconnect() {
     if (this.client) {
-      await this.client.disconnect();
-      this.log.debug('Disconnected from Telegram');
+      try {
+        await this.client.disconnect();
+        this.log.debug('Disconnected from Telegram');
+      } catch (error) {
+        // Ignore TIMEOUT errors during disconnect - these are expected
+        // when the connection is already closed
+        if (error.message && error.message.includes('TIMEOUT')) {
+          this.log.debug('Connection closed (timeout during disconnect - this is normal)');
+        } else {
+          // Re-throw other errors
+          throw error;
+        }
+      }
     }
   }
 
