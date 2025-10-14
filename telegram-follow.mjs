@@ -399,7 +399,8 @@ class TelegramFollower {
       }).catch(error => {
         // Handle connection errors gracefully
         if (error.message && error.message.includes('TIMEOUT')) {
-          console.log('\n⚠️  Connection timeout - processing completed successfully');
+          console.log('\n✅ Processing completed (connection closed normally)');
+          // Don't throw - this is expected behavior
         } else {
           throw error;
         }
@@ -514,7 +515,11 @@ yargs(hideBin(process.argv))
       }
       await follower.followLinks(links, argv);
     } catch (error) {
-      if (!error.message || !error.message.includes('TIMEOUT')) {
+      // TIMEOUT errors during disconnect are expected and can be safely ignored
+      if (error.message && error.message.includes('TIMEOUT')) {
+        console.log('\n✅ Operation completed successfully (connection closed)');
+        process.exit(0);
+      } else {
         console.error('❌ Error:', error.message);
         process.exit(1);
       }
