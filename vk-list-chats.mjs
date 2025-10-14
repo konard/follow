@@ -16,17 +16,57 @@ class VKChatLister {
     }
   }
 
+  /**
+   * Retry operation with exponential backoff
+   * @param {Function} operation - The async operation to retry
+   * @param {string} operationName - Name of the operation for logging
+   * @param {number} maxRetries - Maximum number of retries
+   * @returns {Promise<*>} Result of the operation
+   */
+  async retryOperation(operation, operationName = 'operation', maxRetries = 3) {
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+
+        // Check if it's a timeout/abort error
+        const isTimeoutError = error.type === 'aborted' ||
+                              error.message?.includes('aborted') ||
+                              error.code === 'ABORT_ERR';
+
+        if (isTimeoutError && attempt < maxRetries) {
+          const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+          console.log(`⏳ Timeout during ${operationName} (attempt ${attempt}/${maxRetries})`);
+          console.log(`   Retrying in ${backoffMs}ms...`);
+          await new Promise(resolve => setTimeout(resolve, backoffMs));
+          continue;
+        }
+
+        // If it's not a timeout error or we're out of retries, throw
+        throw error;
+      }
+    }
+
+    throw lastError;
+  }
+
 
   async getGroupChats(options = {}) {
     try {
       console.log('🔍 Fetching group chats...\n');
-      
-      // Get conversations
-      const conversations = await this.client.getConversations({
-        count: options.limit,
-        offset: options.offset,
-        fields: 'photo_100,members_count'
-      });
+
+      // Get conversations with retry logic
+      const conversations = await this.retryOperation(
+        () => this.client.getConversations({
+          count: options.limit,
+          offset: options.offset,
+          fields: 'photo_100,members_count'
+        }),
+        'fetching conversations'
+      );
 
       let chats = conversations.items.filter(item => 
         item.conversation.peer.type === 'chat'
