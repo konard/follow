@@ -10,14 +10,26 @@ export class VKClient {
     this.accessToken = options.accessToken || getenv('VK_ACCESS_TOKEN', '');
     this.log = makeLog({ level: options.logLevel || 'info' });
     this.vk = null;
-    
+
     if (!this.accessToken) {
       throw new Error('VK_ACCESS_TOKEN is required. Set it in .env file or pass as option.');
     }
-    
+
+    // Configure timeout and retry settings
+    // Default apiTimeout is 10000ms (10s) which is too short for some requests
+    // Increase to 30000ms (30s) by default, but allow configuration via env or options
+    const apiTimeout = options.apiTimeout ||
+                      parseInt(getenv('VK_API_TIMEOUT', '30000'), 10);
+    const apiRetryLimit = options.apiRetryLimit ||
+                         parseInt(getenv('VK_API_RETRY_LIMIT', '3'), 10);
+
     this.vk = new VK({
-      token: this.accessToken
+      token: this.accessToken,
+      apiTimeout,
+      apiRetryLimit
     });
+
+    this.log.info(`VK Client configured with timeout: ${apiTimeout}ms, retries: ${apiRetryLimit}`);
   }
 
 
