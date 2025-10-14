@@ -269,6 +269,16 @@ export class TelegramUserClient {
     return null;
   }
 
+  async getMessages(entity, limit = 20) {
+    // Get recent messages from a channel/chat
+    if (!this.client) {
+      throw new Error('Client not connected. Call connect() first.');
+    }
+
+    const messages = await this.client.getMessages(entity, { limit });
+    return messages;
+  }
+
   parseInviteLink(link) {
     // Handle private channel message links (t.me/c/CHANNEL_ID/MESSAGE_ID)
     const privateChannelPattern = /t\.me\/c\/(\d+)(?:\/\d+)?/;

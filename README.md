@@ -143,15 +143,48 @@ Follow this sequence for the complete workflow:
 # 3. Follow the extracted Telegram channels/groups (with mute and archive)
 ./telegram-follow.mjs --mute --archive
 
-# 4. Send Telegram link back to VK chats
-./vk-send-telegram-link-to-chats.mjs --delete-all-incoming-messages-in-chat-on-success
+# 4. Send Telegram link back to VK chats (with automatic Telegram message reading)
+./vk-send-telegram-link-to-chats.mjs --delete-all-incoming-messages-in-chat-on-success --read-telegram-on-deletion
 ```
 
 Or all commands in one go:
 
 ```
-./vk-list-chats.mjs --filter-telegram-chats && ./vk-extract-telegram-links.mjs --incoming-only && ./telegram-follow.mjs --mute --archive && ./vk-send-telegram-link-to-chats.mjs --delete-all-incoming-messages-in-chat-on-success
+./vk-list-chats.mjs --filter-telegram-chats && ./vk-extract-telegram-links.mjs --incoming-only && ./telegram-follow.mjs --mute --archive && ./vk-send-telegram-link-to-chats.mjs --delete-all-incoming-messages-in-chat-on-success --read-telegram-on-deletion
 ```
+
+## Reading Telegram Messages on VK Message Deletion
+
+When you send a link to a VK chat, some groups have automated bots that delete your message and send a response in Telegram with mandatory groups to join. The `--read-telegram-on-deletion` flag automatically reads those Telegram messages immediately after your VK message is deleted.
+
+### How it works:
+1. Send your Telegram link to VK chats
+2. Monitor for message deletion (by admin bots)
+3. When a deletion is detected, immediately connect to Telegram
+4. Read recent messages from the Telegram channel you sent
+5. Extract any Telegram links from bot responses (these are usually mandatory groups)
+6. Save extracted links to `~/.follow/telegram-mandatory-groups.lino`
+
+### Usage:
+
+```bash
+# Read Telegram messages when VK message is deleted
+./vk-send-telegram-link-to-chats.mjs --read-telegram-on-deletion
+
+# Read more messages (default is 20)
+./vk-send-telegram-link-to-chats.mjs --read-telegram-on-deletion --telegram-message-limit 50
+
+# Combine with other options
+./vk-send-telegram-link-to-chats.mjs \
+  --read-telegram-on-deletion \
+  --delete-all-incoming-messages-in-chat-on-success \
+  --verbose
+```
+
+### Requirements:
+- Telegram API credentials (same as for `telegram-join-group.mjs`)
+- Active Telegram session in `.env` file
+- The Telegram link you're sending must be a public channel/group
 
 ## Example Workflow
 
