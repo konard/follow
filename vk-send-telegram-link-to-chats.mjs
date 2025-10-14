@@ -159,6 +159,10 @@ class TelegramLinkSender {
         if (options.deleteAllIncomingMessagesInChatOnSuccess) {
           console.log(`\n🗑️  Deleting all incoming messages in chats where our message survived...`);
 
+          const vipRestrictedChats = [];
+          const permissionDeniedChats = [];
+          const successfullyCleanedChats = [];
+
           for (const msg of survived) {
             try {
               // Get conversation history
@@ -182,11 +186,54 @@ class TelegramLinkSender {
                   delete_for_all: 0 // Delete only for ourselves
                 });
                 console.log(`   ✅ Deleted ${messagesToDelete.length} incoming message(s) in [${msg.chatId}] ${msg.chatTitle}`);
+                successfullyCleanedChats.push(msg);
               } else {
                 console.log(`   ℹ️  No incoming messages to delete in [${msg.chatId}] ${msg.chatTitle}`);
               }
             } catch (error) {
-              console.error(`   ❌ Error deleting messages in [${msg.chatId}] ${msg.chatTitle}: ${error.message}`);
+              // Handle VIP subscription and permission errors gracefully
+              const errorCode = error.code || error.error_code;
+
+              if (errorCode === 962) {
+                console.log(`   💎 [${msg.chatId}] ${msg.chatTitle}: VIP subscription required to delete messages - skipping`);
+                vipRestrictedChats.push({ ...msg, errorCode, errorType: 'VIP subscription required' });
+              } else if (errorCode === 924) {
+                console.log(`   ⚠️  [${msg.chatId}] ${msg.chatTitle}: Cannot delete messages for everyone - permission denied`);
+                permissionDeniedChats.push({ ...msg, errorCode, errorType: 'Cannot delete for everyone' });
+              } else if (errorCode === 15 || errorCode === 7) {
+                console.log(`   ⚠️  [${msg.chatId}] ${msg.chatTitle}: Access denied - insufficient permissions to delete messages`);
+                permissionDeniedChats.push({ ...msg, errorCode, errorType: 'Access denied' });
+              } else if (errorCode === 1256 || errorCode === 1257) {
+                console.log(`   💎 [${msg.chatId}] ${msg.chatTitle}: Subscription issue detected (${errorCode}) - skipping`);
+                vipRestrictedChats.push({ ...msg, errorCode, errorType: `Subscription issue (${errorCode})` });
+              } else {
+                console.error(`   ❌ Error deleting messages in [${msg.chatId}] ${msg.chatTitle}: ${error.message}${errorCode ? ` (code: ${errorCode})` : ''}`);
+              }
+            }
+          }
+
+          // Report deletion summary
+          if (successfullyCleanedChats.length > 0 || vipRestrictedChats.length > 0 || permissionDeniedChats.length > 0) {
+            console.log('\n' + '-'.repeat(50));
+            console.log('🗑️  MESSAGE DELETION SUMMARY');
+            console.log('-'.repeat(50));
+
+            if (successfullyCleanedChats.length > 0) {
+              console.log(`\n✅ Successfully cleaned ${successfullyCleanedChats.length} chat(s)`);
+            }
+
+            if (vipRestrictedChats.length > 0) {
+              console.log(`\n💎 VIP subscription required (${vipRestrictedChats.length} chat(s)):`);
+              vipRestrictedChats.forEach(chat => {
+                console.log(`   • [${chat.chatId}] ${chat.chatTitle} - ${chat.errorType}`);
+              });
+            }
+
+            if (permissionDeniedChats.length > 0) {
+              console.log(`\n⚠️  Permission denied (${permissionDeniedChats.length} chat(s)):`);
+              permissionDeniedChats.forEach(chat => {
+                console.log(`   • [${chat.chatId}] ${chat.chatTitle} - ${chat.errorType}`);
+              });
             }
           }
         }
