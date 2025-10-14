@@ -75,6 +75,7 @@ class TelegramFollower {
       const results = {
         joined: [],
         alreadyMember: [],
+        requestSent: [], // Join requests sent (pending approval)
         failed: [],
         invalid: [],
         muted: [],
@@ -364,7 +365,8 @@ class TelegramFollower {
             } else if (error.message.includes('INVITE_HASH_EXPIRED')) {
               results.failed.push({ link, error: 'Invite link expired' });
             } else if (error.message.includes('INVITE_REQUEST_SENT')) {
-              results.failed.push({ link, error: 'Join request sent (approval required)' });
+              console.log(`  📨 Join request sent (awaiting approval)`);
+              results.requestSent.push(link);
             } else if (error.message.includes('USERNAME_NOT_OCCUPIED')) {
               results.failed.push({ link, error: 'Channel/group does not exist' });
             } else if (error.message.includes('USERNAME_INVALID')) {
@@ -423,7 +425,13 @@ class TelegramFollower {
           results.alreadyMember.forEach(link => console.log(`  • ${link}`));
         }
       }
-      
+
+      if (results.requestSent.length > 0) {
+        console.log(`\n📨 Join request sent (${results.requestSent.length}):`);
+        results.requestSent.forEach(link => console.log(`  • ${link}`));
+        console.log(`   ⏳ These channels require approval. Wait for admin approval.`);
+      }
+
       if (results.failed.length > 0) {
         console.log(`\n❌ Failed to join (${results.failed.length}):`);
         results.failed.forEach(item => {
@@ -458,6 +466,7 @@ class TelegramFollower {
       console.log(`\n📈 Total processed: ${links.length}`);
       console.log(`   Joined: ${results.joined.length}`);
       console.log(`   Already member: ${results.alreadyMember.length}`);
+      console.log(`   Request sent: ${results.requestSent.length}`);
       console.log(`   Failed: ${results.failed.length}`);
       console.log(`   Invalid: ${results.invalid.length}`);
       
