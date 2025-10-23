@@ -193,7 +193,8 @@ export class LinksNotationManager {
 // Default cache filenames
 export const CACHE_FILES = {
   VK_CHATS: 'vk-chats.lino',
-  TELEGRAM_LINKS: 'telegram-links.lino'
+  TELEGRAM_LINKS: 'telegram-links.lino',
+  TELEGRAM_MANDATORY_GROUPS: 'telegram-mandatory-groups.lino'
 };
 
 // Singleton instance for convenience
