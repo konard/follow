@@ -312,8 +312,13 @@ class TelegramLinkSender {
           const age = ((Date.now() - msg.sentAt) / 1000).toFixed(1);
           console.log(`   • [${msg.chatId}] ${msg.chatTitle} (deleted after ${age}s)`);
         });
+
+        // Save rejected chat IDs to cache
+        const rejectedChatIds = deleted.map(msg => msg.chatId);
+        const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, rejectedChatIds);
+        console.log(`\n💾 Saved ${rejectedChatIds.length} rejected chat(s) to cache: ${cacheFile}`);
       }
-      
+
       if (deleted.length === 0) {
         console.log('\n🎉 SUCCESS! No messages were deleted by admin bots.');
         await this.cleanup();
