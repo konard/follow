@@ -4,7 +4,6 @@ import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { VKClient } from './vk.lib.mjs';
 import { lino, CACHE_FILES } from './lino.lib.mjs';
-import { TelegramUserClient } from './telegram.lib.mjs';
 
 class TelegramLinkSender {
   constructor() {
@@ -16,109 +15,6 @@ class TelegramLinkSender {
       process.exit(1);
     }
     this.sentMessages = new Map();
-    this.telegramClient = null;
-  }
-
-  extractTelegramLinks(text) {
-    if (!text) return [];
-
-    // Match various t.me link formats
-    const patterns = [
-      /(?:https?:\/\/)?(?:www\.)?t\.me\/(?:c\/[\d]+\/[\d]+|[\w_]+)/gi,
-      /(?:https?:\/\/)?(?:www\.)?telegram\.me\/[\w_]+/gi,
-      /@[\w_]+/g
-    ];
-
-    const links = new Set();
-
-    patterns.forEach(pattern => {
-      const matches = text.match(pattern) || [];
-      matches.forEach(match => {
-        if (match.startsWith('@')) {
-          links.add(`t.me/${match.substring(1)}`);
-        } else {
-          const normalized = match
-            .replace(/^https?:\/\//, '')
-            .replace(/^www\./, '')
-            .replace('telegram.me/', 't.me/');
-          links.add(normalized);
-        }
-      });
-    });
-
-    return Array.from(links);
-  }
-
-  async readTelegramMessages(telegramLink, options = {}) {
-    try {
-      console.log(`\n📱 Reading Telegram messages from: ${telegramLink}`);
-
-      if (!this.telegramClient) {
-        this.telegramClient = new TelegramUserClient();
-        await this.telegramClient.connect();
-      }
-
-      // Parse the Telegram link
-      const linkInfo = this.telegramClient.parseInviteLink(telegramLink);
-
-      if (!linkInfo) {
-        console.log(`   ⚠️  Could not parse Telegram link: ${telegramLink}`);
-        return [];
-      }
-
-      let entity;
-      if (linkInfo.type === 'public') {
-        entity = await this.telegramClient.getEntity(linkInfo.username);
-      } else if (linkInfo.type === 'private') {
-        console.log(`   ⚠️  Private invite links not yet joined - cannot read messages`);
-        return [];
-      } else if (linkInfo.type === 'private_channel') {
-        console.log(`   ⚠️  Private channel message links not supported for message reading`);
-        return [];
-      }
-
-      // Get recent messages
-      const messages = await this.telegramClient.getMessages(entity, options.telegramMessageLimit || 20);
-
-      console.log(`   📬 Found ${messages.length} recent messages`);
-
-      // Extract Telegram links from messages
-      const allLinks = new Set();
-      for (const message of messages) {
-        if (message.text) {
-          const links = this.extractTelegramLinks(message.text);
-          links.forEach(link => allLinks.add(link));
-
-          if (options.verbose && links.length > 0) {
-            const preview = message.text.length > 100
-              ? message.text.substring(0, 100) + '...'
-              : message.text;
-            console.log(`   🔗 Found ${links.length} link(s) in message: "${preview}"`);
-            links.forEach(link => console.log(`      • ${link}`));
-          }
-        }
-      }
-
-      const uniqueLinks = Array.from(allLinks);
-      console.log(`   ✅ Extracted ${uniqueLinks.length} unique Telegram link(s)`);
-
-      if (uniqueLinks.length > 0) {
-        uniqueLinks.forEach(link => console.log(`      • ${link}`));
-
-        // Save to cache
-        const cacheFile = lino.saveToCache(CACHE_FILES.TELEGRAM_MANDATORY_GROUPS, uniqueLinks);
-        console.log(`   💾 Saved to cache: ${cacheFile}`);
-      }
-
-      return uniqueLinks;
-
-    } catch (error) {
-      console.error(`   ❌ Error reading Telegram messages: ${error.message}`);
-      if (options.verbose) {
-        console.error(error);
-      }
-      return [];
-    }
   }
 
   async sendLinkToChatIds(chatIds, telegramLink, options = {}) {
@@ -223,11 +119,6 @@ class TelegramLinkSender {
               info.deleted = true;
               const age = ((Date.now() - info.sentAt) / 1000).toFixed(1);
               console.log(`❌ Message ${messageId} deleted in [${info.chatId}] ${info.chatTitle} after ${age}s`);
-
-              // Read Telegram messages if option is enabled
-              if (options.readTelegramOnDeletion) {
-                await this.readTelegramMessages(telegramLink, options);
-              }
             } else if (options.verbose) {
               console.log(`  ✓ Message ${messageId} still exists in [${info.chatId}] ${info.chatTitle}`);
             }
@@ -236,11 +127,6 @@ class TelegramLinkSender {
               info.deleted = true;
               const age = ((Date.now() - info.sentAt) / 1000).toFixed(1);
               console.log(`❌ Message ${messageId} deleted in [${info.chatId}] ${info.chatTitle} after ${age}s`);
-
-              // Read Telegram messages if option is enabled
-              if (options.readTelegramOnDeletion) {
-                await this.readTelegramMessages(telegramLink, options);
-              }
             } else if (options.verbose) {
               console.log(`  ⚠️ Error checking message ${messageId}: ${error.message}`);
             }
@@ -321,30 +207,18 @@ class TelegramLinkSender {
 
       if (deleted.length === 0) {
         console.log('\n🎉 SUCCESS! No messages were deleted by admin bots.');
-        await this.cleanup();
         process.exit(0);
       } else {
         console.log('\n⚠️ PARTIAL SUCCESS: Some messages were deleted.');
-        await this.cleanup();
         process.exit(1);
       }
 
     } catch (error) {
       console.error('❌ Failed to send links:', error.message);
-      await this.cleanup();
       throw error;
     }
   }
 
-  async cleanup() {
-    if (this.telegramClient) {
-      try {
-        await this.telegramClient.disconnect();
-      } catch (error) {
-        // Ignore cleanup errors
-      }
-    }
-  }
 }
 
 yargs(hideBin(process.argv))
@@ -407,16 +281,6 @@ yargs(hideBin(process.argv))
     type: 'boolean',
     default: false
   })
-  .option('read-telegram-on-deletion', {
-    describe: 'Read Telegram messages from the sent link immediately after VK message deletion is detected',
-    type: 'boolean',
-    default: false
-  })
-  .option('telegram-message-limit', {
-    describe: 'Number of recent Telegram messages to fetch when reading (used with --read-telegram-on-deletion)',
-    type: 'number',
-    default: 20
-  })
   .help()
   .example('$0', 'Send https://t.me/gptDeep to cached chats and monitor for 3 minutes')
   .example('$0 --link https://t.me/myChannel', 'Send custom link to cached chats')
@@ -425,6 +289,4 @@ yargs(hideBin(process.argv))
   .example('$0 --monitor-duration 300000 --check-interval 15000', 'Monitor for 5 minutes, check every 15 seconds')
   .example('$0 --verbose', 'Show detailed monitoring information')
   .example('$0 --delete-all-incoming-messages-in-chat-on-success', 'Delete incoming messages after successful monitoring')
-  .example('$0 --read-telegram-on-deletion', 'Read Telegram messages immediately when VK message is deleted')
-  .example('$0 --read-telegram-on-deletion --telegram-message-limit 50', 'Read 50 recent messages from Telegram on deletion')
   .argv;
