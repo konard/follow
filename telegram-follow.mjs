@@ -327,25 +327,42 @@ class TelegramFollower {
               }
             } else if (parsed.type === 'private_channel') {
               // Handle private channel links (t.me/c/CHANNEL_ID/MESSAGE_ID)
-              console.log(`  📨 Joining private channel ${parsed.channelId}...`);
-              
+              // These are message links to private channels - you can only access them if you're already a member
+              // You cannot join a private channel using just the channel ID
+              console.log(`  📨 Checking access to private channel ${parsed.channelId}...`);
+
               try {
                 // Convert channel ID to proper format (add -100 prefix for channels)
                 const channelPeerId = `-100${parsed.channelId}`;
                 const channel = await this.client.getEntity(parseInt(channelPeerId));
                 await this.sleep(0.5); // Delay after API call
-                
-                // Check if we're already in the channel
+
+                // If we reach here, we're already in the channel
                 console.log(`  ℹ️  Already a member of private channel`);
                 results.alreadyMember.push(link);
                 await this.sleep(0.5); // Small delay between checks
               } catch (error) {
-                if (error.message.includes('CHANNEL_PRIVATE') || error.message.includes('CHANNEL_INVALID')) {
-                  console.log(`  ❌ Cannot join - private channel (need invite link)`);
+                // Handle specific error cases for private channels
+                const errorMsg = error.message || '';
+
+                if (errorMsg.includes('CHANNEL_INVALID')) {
+                  // This is the most common case - user is not a member
+                  console.log(`  ❌ Not a member of this private channel`);
+                  console.log(`  💡 Private channels require an invite link (t.me/+hash or t.me/joinchat/hash)`);
+                  results.failed.push({ link, error: 'Not a member - private channel requires invite link' });
+                } else if (errorMsg.includes('CHANNEL_PRIVATE')) {
+                  console.log(`  ❌ Cannot access - private channel (need invite link)`);
                   results.failed.push({ link, error: 'Private channel - need invite link' });
+                } else if (errorMsg.includes('Could not find the input entity')) {
+                  // Another form of the same error
+                  console.log(`  ❌ Channel not accessible - not a member`);
+                  console.log(`  💡 You need an invite link to join this private channel`);
+                  results.failed.push({ link, error: 'Channel not found - need invite link to join' });
                 } else {
+                  // Re-throw unexpected errors
                   throw error;
                 }
+                await this.sleep(0.5); // Small delay after error
               }
             }
             
@@ -371,6 +388,10 @@ class TelegramFollower {
               results.failed.push({ link, error: 'Invalid username' });
             } else if (error.message.includes('CHANNEL_PRIVATE')) {
               results.failed.push({ link, error: 'Private channel (invite link required)' });
+            } else if (error.message.includes('CHANNEL_INVALID')) {
+              results.failed.push({ link, error: 'Channel not accessible (may need invite link)' });
+            } else if (error.message.includes('Could not find the input entity')) {
+              results.failed.push({ link, error: 'Entity not found (may need invite link)' });
             } else if (error.message.includes('CHANNELS_TOO_MUCH')) {
               results.failed.push({ link, error: 'Too many channels joined' });
               console.log('\n⚠️  Reached Telegram limit for channels. Consider leaving some channels.');
