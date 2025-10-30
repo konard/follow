@@ -119,13 +119,19 @@ export class TelegramUserClient {
         this.log.debug('Disconnected from Telegram');
       } catch (error) {
         // Ignore TIMEOUT errors during disconnect - these are expected
-        // when the connection is already closed
+        // when the connection is already closed or the update loop is still running
         if (error.message && error.message.includes('TIMEOUT')) {
           this.log.debug('Connection closed (timeout during disconnect - this is normal)');
         } else {
           // Re-throw other errors
           throw error;
         }
+      } finally {
+        // Always call destroy() to fully terminate the client and stop all background tasks
+        // This prevents the _updateLoop from continuing and throwing TIMEOUT errors
+        // See: https://github.com/gram-js/gramjs/issues/615
+        await this.client.destroy();
+        this.log.debug('Client destroyed');
       }
     }
   }
