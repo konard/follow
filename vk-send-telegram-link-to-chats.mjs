@@ -207,6 +207,11 @@ class TelegramLinkSender {
 
       if (deleted.length === 0) {
         console.log('\n🎉 SUCCESS! No messages were deleted by admin bots.');
+
+        // Clear the cache since there are no rejected chats
+        const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, []);
+        console.log(`💾 Cleared rejected chats cache: ${cacheFile}`);
+
         process.exit(0);
       } else {
         console.log('\n⚠️ PARTIAL SUCCESS: Some messages were deleted.');
