@@ -114,24 +114,73 @@ export class TelegramUserClient {
 
   async disconnect() {
     if (this.client) {
-      try {
-        await this.client.disconnect();
-        this.log.debug('Disconnected from Telegram');
-      } catch (error) {
-        // Ignore TIMEOUT errors during disconnect - these are expected
-        // when the connection is already closed or the update loop is still running
-        if (error.message && error.message.includes('TIMEOUT')) {
-          this.log.debug('Connection closed (timeout during disconnect - this is normal)');
-        } else {
-          // Re-throw other errors
-          throw error;
+      const disconnectErrors = [];
+      const destroyErrors = [];
+
+      // Try disconnect up to 3 times
+      let disconnectSuccess = false;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          this.log.debug(`Attempting disconnect (attempt ${attempt}/3)...`);
+          await this.client.disconnect();
+          this.log.debug('Disconnected from Telegram');
+          disconnectSuccess = true;
+          break;
+        } catch (error) {
+          this.log.debug(`Disconnect attempt ${attempt} failed: ${error.message}`);
+          disconnectErrors.push(error);
+
+          // If it's a TIMEOUT or connection error and we have more attempts, continue retrying
+          if (attempt < 3 && (error.message?.includes('TIMEOUT') || error.message?.includes('connection'))) {
+            // Brief delay before retry
+            await new Promise(resolve => setTimeout(resolve, 100));
+            continue;
+          }
+
+          // If it's the last attempt or a different type of error, break
+          if (attempt === 3) {
+            this.log.debug('All disconnect attempts failed, will proceed to destroy');
+          }
         }
-      } finally {
-        // Always call destroy() to fully terminate the client and stop all background tasks
-        // This prevents the _updateLoop from continuing and throwing TIMEOUT errors
-        // See: https://github.com/gram-js/gramjs/issues/615
-        await this.client.destroy();
-        this.log.debug('Client destroyed');
+      }
+
+      // Try destroy up to 3 times (always attempt, even if disconnect succeeded)
+      let destroySuccess = false;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          this.log.debug(`Attempting destroy (attempt ${attempt}/3)...`);
+          await this.client.destroy();
+          this.log.debug('Client destroyed');
+          destroySuccess = true;
+          break;
+        } catch (error) {
+          this.log.debug(`Destroy attempt ${attempt} failed: ${error.message}`);
+          destroyErrors.push(error);
+
+          // If it's a TIMEOUT or connection error and we have more attempts, continue retrying
+          if (attempt < 3 && (error.message?.includes('TIMEOUT') || error.message?.includes('connection'))) {
+            // Brief delay before retry
+            await new Promise(resolve => setTimeout(resolve, 100));
+            continue;
+          }
+
+          // If it's the last attempt, break
+          if (attempt === 3) {
+            this.log.debug('All destroy attempts failed');
+          }
+        }
+      }
+
+      // If both disconnect and destroy failed after all retries, throw aggregated error
+      if (!disconnectSuccess && !destroySuccess && (disconnectErrors.length > 0 || destroyErrors.length > 0)) {
+        const aggregatedError = new Error('Failed to properly disconnect and destroy Telegram client after all retry attempts');
+        aggregatedError.disconnectErrors = disconnectErrors;
+        aggregatedError.destroyErrors = destroyErrors;
+        aggregatedError.cause = {
+          disconnect: disconnectErrors.map(e => e.message),
+          destroy: destroyErrors.map(e => e.message)
+        };
+        throw aggregatedError;
       }
     }
   }
