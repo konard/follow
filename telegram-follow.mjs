@@ -357,28 +357,34 @@ class TelegramFollower {
             }
             
           } catch (error) {
-            console.log(`  ❌ Failed: ${error.message}`);
-            
-            if (error.message.includes('USER_ALREADY_PARTICIPANT')) {
+            // Special handling for INVITE_REQUEST_SENT - it's not a failure, it's a successful join request
+            if (error.message.includes('INVITE_REQUEST_SENT')) {
+              console.log(`  📨 Join request sent (awaiting approval)`);
+              results.requestSent.push(link);
+            } else if (error.message.includes('USER_ALREADY_PARTICIPANT')) {
+              console.log(`  ❌ Failed: ${error.message}`);
               results.alreadyMember.push(link);
               await this.sleep(0.5); // Small delay after error
             } else if (error.message.includes('INVITE_HASH_EXPIRED')) {
+              console.log(`  ❌ Failed: ${error.message}`);
               results.failed.push({ link, error: 'Invite link expired' });
-            } else if (error.message.includes('INVITE_REQUEST_SENT')) {
-              console.log(`  📨 Join request sent (awaiting approval)`);
-              results.requestSent.push(link);
             } else if (error.message.includes('USERNAME_NOT_OCCUPIED')) {
+              console.log(`  ❌ Failed: ${error.message}`);
               results.failed.push({ link, error: 'Channel/group does not exist' });
             } else if (error.message.includes('USERNAME_INVALID')) {
+              console.log(`  ❌ Failed: ${error.message}`);
               results.failed.push({ link, error: 'Invalid username' });
             } else if (error.message.includes('CHANNEL_PRIVATE')) {
+              console.log(`  ❌ Failed: ${error.message}`);
               results.failed.push({ link, error: 'Private channel (invite link required)' });
             } else if (error.message.includes('CHANNELS_TOO_MUCH')) {
+              console.log(`  ❌ Failed: ${error.message}`);
               results.failed.push({ link, error: 'Too many channels joined' });
               console.log('\n⚠️  Reached Telegram limit for channels. Consider leaving some channels.');
               console.log('💡 Tip: Use --archive to archive channels instead of leaving them');
               break;
             } else if (error.message.includes('FLOOD_WAIT')) {
+              console.log(`  ❌ Failed: ${error.message}`);
               const waitTime = parseInt(error.message.match(/\d+/)?.[0] || '60');
               results.failed.push({ link, error: `Rate limited (wait ${waitTime}s)` });
               console.log(`\n⚠️  Rate limited by Telegram. Please wait ${waitTime} seconds before continuing.`);
@@ -390,10 +396,13 @@ class TelegramFollower {
                 await this.sleep(waitTime);
               }
             } else if (error.message.includes('USER_BANNED_IN_CHANNEL')) {
+              console.log(`  ❌ Failed: ${error.message}`);
               results.failed.push({ link, error: 'You are banned from this channel' });
             } else if (error.message.includes('CHAT_RESTRICTED')) {
+              console.log(`  ❌ Failed: ${error.message}`);
               results.failed.push({ link, error: 'Chat is restricted' });
             } else {
+              console.log(`  ❌ Failed: ${error.message}`);
               results.failed.push({ link, error: error.message });
             }
           }
