@@ -92,6 +92,10 @@ class AutoFollower {
       // If all messages survived on first attempt, we're done
       if (exitCode === 0) {
         console.log('\n🎉 All messages survived on first attempt! No retries needed.');
+        console.log('\n' + '='.repeat(60));
+        console.log('✅ Auto-Follow Sequence Complete!');
+        console.log('='.repeat(60));
+        return;
       }
 
       // Loop: Repeat steps 2-4 while there are rejected chats
