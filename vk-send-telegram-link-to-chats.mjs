@@ -113,8 +113,8 @@ class TelegramLinkSender {
               message_ids: messageId
             });
             
-            if (!messages.items || messages.items.length === 0 || 
-                messages.items[0]?.deleted === 1 || 
+            if (!messages.items || messages.items.length === 0 ||
+                messages.items[0]?.deleted === 1 ||
                 messages.items[0]?.is_unavailable === true) {
               info.deleted = true;
               const age = ((Date.now() - info.sentAt) / 1000).toFixed(1);
@@ -198,21 +198,32 @@ class TelegramLinkSender {
           const age = ((Date.now() - msg.sentAt) / 1000).toFixed(1);
           console.log(`   • [${msg.chatId}] ${msg.chatTitle} (deleted after ${age}s)`);
         });
+
+        // Save rejected chat IDs to cache
+        const rejectedChatIds = deleted.map(msg => msg.chatId);
+        const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, rejectedChatIds);
+        console.log(`\n💾 Saved ${rejectedChatIds.length} rejected chat(s) to cache: ${cacheFile}`);
       }
-      
+
       if (deleted.length === 0) {
         console.log('\n🎉 SUCCESS! No messages were deleted by admin bots.');
+
+        // Clear the cache since there are no rejected chats
+        const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, []);
+        console.log(`💾 Cleared rejected chats cache: ${cacheFile}`);
+
         process.exit(0);
       } else {
         console.log('\n⚠️ PARTIAL SUCCESS: Some messages were deleted.');
         process.exit(1);
       }
-      
+
     } catch (error) {
       console.error('❌ Failed to send links:', error.message);
       throw error;
     }
   }
+
 }
 
 yargs(hideBin(process.argv))

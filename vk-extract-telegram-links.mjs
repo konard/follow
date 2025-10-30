@@ -19,16 +19,18 @@ class TelegramLinkExtractor {
 
   extractTelegramLinks(text) {
     if (!text) return [];
-    
+
     // Match various t.me link formats
     const patterns = [
-      /(?:https?:\/\/)?(?:www\.)?t\.me\/(?:c\/[\d]+\/[\d]+|[\w_]+)/gi, // Include private channel format
-      /(?:https?:\/\/)?(?:www\.)?telegram\.me\/[\w_]+/gi,
+      /(?:https?:\/\/)?(?:www\.)?t\.me\/\+[A-Za-z0-9_-]+/gi, // Private invite links (t.me/+hash)
+      /(?:https?:\/\/)?(?:www\.)?t\.me\/(?:c\/[\d]+\/[\d]+|[\w_]+)/gi, // Public channels and private channel message links
+      /(?:https?:\/\/)?(?:www\.)?telegram\.me\/\+[A-Za-z0-9_-]+/gi, // Private invite links (telegram.me)
+      /(?:https?:\/\/)?(?:www\.)?telegram\.me\/[\w_]+/gi, // Public channels (telegram.me)
       /@[\w_]+/g // Also capture @username mentions that might be Telegram
     ];
-    
+
     const links = new Set();
-    
+
     patterns.forEach(pattern => {
       const matches = text.match(pattern) || [];
       matches.forEach(match => {
@@ -45,7 +47,7 @@ class TelegramLinkExtractor {
         }
       });
     });
-    
+
     return Array.from(links);
   }
 

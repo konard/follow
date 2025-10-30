@@ -22,6 +22,10 @@ bun install
 ```env
 VK_ACCESS_TOKEN=your_vk_access_token_here
 LOG_LEVEL=info
+
+# Optional: Configure VK API timeout and retry settings
+# VK_API_TIMEOUT=30000        # Timeout in milliseconds (default: 30000ms/30s)
+# VK_API_RETRY_LIMIT=3        # Number of retries for failed requests (default: 3)
 ```
 
 ### Usage
@@ -128,6 +132,37 @@ Both commands include comprehensive error handling:
 - Rate limiting
 - Network errors
 - Permission errors
+- **Timeout errors with automatic retry**: VK commands now automatically retry on timeout (AbortError) with exponential backoff
+
+### Timeout Configuration
+
+If you experience timeout errors (AbortError), you can adjust the timeout settings:
+
+1. **Via Environment Variables** (recommended):
+   ```bash
+   # In .env file
+   VK_API_TIMEOUT=60000        # Increase to 60 seconds
+   VK_API_RETRY_LIMIT=5        # Increase retry attempts
+   ```
+
+2. **Via Code** (for programmatic usage):
+   ```javascript
+   import { VKClient } from './vk.lib.mjs';
+
+   const client = new VKClient({
+     apiTimeout: 60000,         // 60 seconds
+     apiRetryLimit: 5           // 5 retry attempts
+   });
+   ```
+
+**Default Values**:
+- `VK_API_TIMEOUT`: 30000ms (30 seconds) - increased from vk-io's default 10s
+- `VK_API_RETRY_LIMIT`: 3 attempts - vk-io's default
+
+**Retry Behavior**:
+- Automatic exponential backoff: 1s, 2s, 4s, 8s (capped at 10s)
+- Only retries on timeout/abort errors
+- Shows progress messages during retries
 
 ## Standard Command Sequence
 
@@ -147,11 +182,22 @@ Follow this sequence for the complete workflow:
 ./vk-send-telegram-link-to-chats.mjs --delete-all-incoming-messages-in-chat-on-success
 ```
 
-Or all commands in one go:
+Or use the automated workflow:
 
+```bash
+# Run the complete auto-follow sequence
+./auto-follow.mjs
+
+# With verbose output
+./auto-follow.mjs --verbose
 ```
-./vk-list-chats.mjs --filter-telegram-chats && ./vk-extract-telegram-links.mjs --incoming-only && ./telegram-follow.mjs --mute --archive && ./vk-send-telegram-link-to-chats.mjs --delete-all-incoming-messages-in-chat-on-success
-```
+
+The `auto-follow.mjs` script automatically:
+1. Lists VK chats with Telegram in the name
+2. Extracts Telegram links from those chats (including private invite links)
+3. Follows the extracted channels/groups
+4. Sends your Telegram link to VK chats
+5. Retries rejected chats with fresh link extraction until success or max iterations
 
 ## Example Workflow
 
