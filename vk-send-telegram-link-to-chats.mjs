@@ -17,6 +17,46 @@ class TelegramLinkSender {
     this.sentMessages = new Map();
   }
 
+  /**
+   * Check if there's an admin message indicating we should skip retry
+   * Looks for patterns like "ещё НЕ прошло 5 чужих ссылок"
+   */
+  async checkForAdminSkipMessage(peerId, verbose = false) {
+    try {
+      // Get recent message history to check for admin message
+      const history = await this.client.vk.api.messages.getHistory({
+        peer_id: peerId,
+        count: 10 // Check last 10 messages
+      });
+
+      if (!history.items || history.items.length === 0) {
+        return false;
+      }
+
+      // Pattern to match "less than 5 other links" messages
+      // Examples:
+      // "⚠ [Name], ещё НЕ прошло 5 чужих ссылок. Дождитесь."
+      const skipPattern = /ещё\s+НЕ\s+прошло\s+5\s+чужих\s+ссылок/i;
+
+      for (const message of history.items) {
+        if (message.text && skipPattern.test(message.text)) {
+          if (verbose) {
+            console.log(`  📋 Found admin skip message: "${message.text}"`);
+          }
+          return true;
+        }
+      }
+
+      return false;
+    } catch (error) {
+      if (verbose) {
+        console.log(`  ⚠️ Error checking for admin skip message: ${error.message}`);
+      }
+      // If we can't check, don't skip retry (safer default)
+      return false;
+    }
+  }
+
   async sendLinkToChatIds(chatIds, telegramLink, options = {}) {
     try {
       console.log(`📤 Sending Telegram link to ${chatIds.length} chat(s)...`);
@@ -107,18 +147,25 @@ class TelegramLinkSender {
         
         for (const messageId of messagesToCheck) {
           const info = this.sentMessages.get(messageId);
-          
+
           try {
             const messages = await this.client.vk.api.messages.getById({
               message_ids: messageId
             });
-            
+
             if (!messages.items || messages.items.length === 0 ||
                 messages.items[0]?.deleted === 1 ||
                 messages.items[0]?.is_unavailable === true) {
               info.deleted = true;
               const age = ((Date.now() - info.sentAt) / 1000).toFixed(1);
-              console.log(`❌ Message ${messageId} deleted in [${info.chatId}] ${info.chatTitle} after ${age}s`);
+
+              // Check if deletion was due to "less than 5 other links" admin message
+              const skipRetry = await this.checkForAdminSkipMessage(info.peerId, options.verbose);
+              if (skipRetry) {
+                info.skipRetry = true;
+              }
+
+              console.log(`❌ Message ${messageId} deleted in [${info.chatId}] ${info.chatTitle} after ${age}s${skipRetry ? ' (skip retry: less than 5 other links)' : ''}`);
             } else if (options.verbose) {
               console.log(`  ✓ Message ${messageId} still exists in [${info.chatId}] ${info.chatTitle}`);
             }
@@ -126,7 +173,14 @@ class TelegramLinkSender {
             if (error.code === 100) {
               info.deleted = true;
               const age = ((Date.now() - info.sentAt) / 1000).toFixed(1);
-              console.log(`❌ Message ${messageId} deleted in [${info.chatId}] ${info.chatTitle} after ${age}s`);
+
+              // Check if deletion was due to "less than 5 other links" admin message
+              const skipRetry = await this.checkForAdminSkipMessage(info.peerId, options.verbose);
+              if (skipRetry) {
+                info.skipRetry = true;
+              }
+
+              console.log(`❌ Message ${messageId} deleted in [${info.chatId}] ${info.chatTitle} after ${age}s${skipRetry ? ' (skip retry: less than 5 other links)' : ''}`);
             } else if (options.verbose) {
               console.log(`  ⚠️ Error checking message ${messageId}: ${error.message}`);
             }
@@ -196,25 +250,36 @@ class TelegramLinkSender {
       if (deleted.length > 0) {
         deleted.forEach(msg => {
           const age = ((Date.now() - msg.sentAt) / 1000).toFixed(1);
-          console.log(`   • [${msg.chatId}] ${msg.chatTitle} (deleted after ${age}s)`);
+          const skipNote = msg.skipRetry ? ' [skip retry]' : '';
+          console.log(`   • [${msg.chatId}] ${msg.chatTitle} (deleted after ${age}s)${skipNote}`);
         });
 
-        // Save rejected chat IDs to cache
-        const rejectedChatIds = deleted.map(msg => msg.chatId);
-        const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, rejectedChatIds);
-        console.log(`\n💾 Saved ${rejectedChatIds.length} rejected chat(s) to cache: ${cacheFile}`);
+        // Save rejected chat IDs to cache, excluding those marked for skip retry
+        const rejectedChatIds = deleted
+          .filter(msg => !msg.skipRetry)
+          .map(msg => msg.chatId);
+
+        if (rejectedChatIds.length > 0) {
+          const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, rejectedChatIds);
+          console.log(`\n💾 Saved ${rejectedChatIds.length} rejected chat(s) to cache: ${cacheFile}`);
+        } else {
+          // All deleted messages were marked to skip retry
+          const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, []);
+          console.log(`\n💾 All deleted chats marked to skip retry. Cleared cache: ${cacheFile}`);
+        }
       }
+
+      // Determine exit code based on whether we need to retry
+      const needsRetry = deleted.some(msg => !msg.skipRetry);
 
       if (deleted.length === 0) {
         console.log('\n🎉 SUCCESS! No messages were deleted by admin bots.');
-
-        // Clear the cache since there are no rejected chats
-        const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, []);
-        console.log(`💾 Cleared rejected chats cache: ${cacheFile}`);
-
+        process.exit(0);
+      } else if (!needsRetry) {
+        console.log('\n✅ All deleted messages marked to skip retry (less than 5 other links). No retry needed.');
         process.exit(0);
       } else {
-        console.log('\n⚠️ PARTIAL SUCCESS: Some messages were deleted.');
+        console.log('\n⚠️ PARTIAL SUCCESS: Some messages were deleted and will be retried.');
         process.exit(1);
       }
 
