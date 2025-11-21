@@ -203,7 +203,7 @@ class TelegramLinkSender {
         }
       }
       
-      console.log(`✅ Survived: ${survived.length}/${this.sentMessages.size}`);
+      console.log(`✅ ${survived.length}/${this.sentMessages.size} messages survived`);
       if (survived.length > 0) {
         survived.forEach(msg => {
           console.log(`   • [${msg.chatId}] ${msg.chatTitle} (message ID: ${msg.messageId})`);
@@ -245,41 +245,47 @@ class TelegramLinkSender {
           }
         }
       }
-      
-      console.log(`\n❌ Deleted: ${deleted.length}/${this.sentMessages.size}`);
-      if (deleted.length > 0) {
-        deleted.forEach(msg => {
+
+      // Separate skipped from deleted-for-retry
+      const skipped = deleted.filter(msg => msg.skipRetry);
+      const deletedForRetry = deleted.filter(msg => !msg.skipRetry);
+
+      if (skipped.length > 0) {
+        console.log(`\n⏭️  ${skipped.length}/${this.sentMessages.size} messages skipped, no retries needed`);
+        skipped.forEach(msg => {
           const age = ((Date.now() - msg.sentAt) / 1000).toFixed(1);
-          const skipNote = msg.skipRetry ? ' [skip retry]' : '';
-          console.log(`   • [${msg.chatId}] ${msg.chatTitle} (deleted after ${age}s)${skipNote}`);
+          console.log(`   • [${msg.chatId}] ${msg.chatTitle} (deleted after ${age}s)`);
+        });
+      }
+
+      if (deletedForRetry.length > 0) {
+        console.log(`\n❌ ${deletedForRetry.length}/${this.sentMessages.size} messages deleted, will be retried`);
+        deletedForRetry.forEach(msg => {
+          const age = ((Date.now() - msg.sentAt) / 1000).toFixed(1);
+          console.log(`   • [${msg.chatId}] ${msg.chatTitle} (deleted after ${age}s)`);
         });
 
-        // Save rejected chat IDs to cache, excluding those marked for skip retry
-        const rejectedChatIds = deleted
-          .filter(msg => !msg.skipRetry)
-          .map(msg => msg.chatId);
-
-        if (rejectedChatIds.length > 0) {
-          const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, rejectedChatIds);
-          console.log(`\n💾 Saved ${rejectedChatIds.length} rejected chat(s) to cache: ${cacheFile}`);
-        } else {
-          // All deleted messages were marked to skip retry
-          const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, []);
-          console.log(`\n💾 All deleted chats marked to skip retry. Cleared cache: ${cacheFile}`);
-        }
+        // Save rejected chat IDs to cache
+        const rejectedChatIds = deletedForRetry.map(msg => msg.chatId);
+        const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, rejectedChatIds);
+        console.log(`\n💾 Saved ${rejectedChatIds.length} rejected chat(s) to cache: ${cacheFile}`);
+      } else if (deleted.length > 0) {
+        // All deleted messages were marked to skip retry
+        const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, []);
+        console.log(`\n💾 All deleted chats marked to skip retry. Cleared cache: ${cacheFile}`);
       }
 
       // Determine exit code based on whether we need to retry
       const needsRetry = deleted.some(msg => !msg.skipRetry);
 
       if (deleted.length === 0) {
-        console.log('\n🎉 SUCCESS! No messages were deleted by admin bots.');
+        console.log('\n🎉 All messages survived on first attempt! No retries needed.');
         process.exit(0);
       } else if (!needsRetry) {
-        console.log('\n✅ All deleted messages marked to skip retry (less than 5 other links). No retry needed.');
+        console.log('\n✅ All messages either survived or were skipped. No retries needed.');
         process.exit(0);
       } else {
-        console.log('\n⚠️ PARTIAL SUCCESS: Some messages were deleted and will be retried.');
+        console.log('\n⚠️ Some messages were deleted and will be retried.');
         process.exit(1);
       }
 
