@@ -1,4 +1,4 @@
-import { Parser as LinoParser } from '@linksplatform/protocols-lino';
+import { Parser as LinoParser } from 'links-notation';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { Parser as LinoParser } from '@linksplatform/protocols-lino';
+import { Parser as LinoParser } from 'links-notation';
 
 // Test parsing the Lino input format for telegram-follow.mjs
 const testInput = `(
