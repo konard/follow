@@ -6,7 +6,8 @@
   "scripts": {
     "vk-list": "bun run vk-list-chats.mjs",
     "telegram-join": "bun run telegram-join-group.mjs",
-    "test-session": "bun run test-session.mjs"
+    "test-session": "bun run test-session.mjs",
+    "test": "bun test"
   },
   "dependencies": {
     "@dotenvx/dotenvx": "^1.50.1",

@@ -3,7 +3,8 @@
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { VKClient } from './vk.lib.mjs';
-import { lino, CACHE_FILES } from './lino.lib.mjs';
+import { lino } from "./lino.lib.mjs";
+import { CACHE_FILES } from "./cache-files.mjs";
 
 class TelegramLinkSender {
   constructor() {
@@ -267,25 +268,33 @@ class TelegramLinkSender {
 
         // Save rejected chat IDs to cache
         const rejectedChatIds = deletedForRetry.map(msg => msg.chatId);
-        const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, rejectedChatIds);
+        const cacheFile = lino.saveAsLino(CACHE_FILES.VK_CHATS, rejectedChatIds);
         console.log(`\n💾 Saved ${rejectedChatIds.length} rejected chat(s) to cache: ${cacheFile}`);
       } else if (deleted.length > 0) {
         // All deleted messages were marked to skip retry
-        const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, []);
+        const cacheFile = lino.saveAsLino(CACHE_FILES.VK_CHATS, []);
         console.log(`\n💾 All deleted chats marked to skip retry. Cleared cache: ${cacheFile}`);
       }
 
       // Determine exit code based on whether we need to retry
       const needsRetry = deleted.some(msg => !msg.skipRetry);
 
+      // Save results to cache for auto-follow to read
+      const results = {
+        totalSent: this.sentMessages.size,
+        survived: this.sentMessages.size - deleted.length,
+        deleted: deleted.length,
+        skipped: skipped.length,
+        deletedForRetry: deletedForRetry.length,
+        needsRetry: needsRetry
+      };
+      lino.saveJsonAsLino(CACHE_FILES.LAST_VK_SEND_RESULT, results);
+
       if (deleted.length === 0) {
-        console.log('\n🎉 All messages survived on first attempt! No retries needed.');
         process.exit(0);
       } else if (!needsRetry) {
-        console.log('\n✅ All messages either survived or were skipped. No retries needed.');
         process.exit(0);
       } else {
-        console.log('\n⚠️ Some messages were deleted and will be retried.');
         process.exit(1);
       }
 
@@ -306,7 +315,7 @@ yargs(hideBin(process.argv))
       type: 'string',
       coerce: (input) => {
         if (!input) {
-          const cache = lino.requireCache(CACHE_FILES.VK_CHATS, 
+          const cache = lino.requireFile(CACHE_FILES.VK_CHATS, 
             'No chat IDs provided and cache file not found.\n💡 Run vk-list-chats.mjs first to create the cache file');
           return cache.numericIds;
         }
@@ -317,7 +326,7 @@ yargs(hideBin(process.argv))
     const sender = new TelegramLinkSender();
     let chatIds = argv.chatIds;
     if (!chatIds) {
-      const cache = lino.requireCache(CACHE_FILES.VK_CHATS, 
+      const cache = lino.requireFile(CACHE_FILES.VK_CHATS, 
         'No chat IDs provided and cache file not found.\n💡 Run vk-list-chats.mjs first to create the cache file');
       chatIds = cache.numericIds;
     }

@@ -17,13 +17,13 @@ console.log('=' .repeat(60));
 // Step 1: Simulate rejected chats being saved initially
 console.log('1. Simulate initial VK chats discovered');
 const initialChats = [1159, 1158, 1163, 1162];
-lino.saveToCache(CACHE_FILES.VK_CHATS, initialChats);
+lino.saveAsLino(CACHE_FILES.VK_CHATS, initialChats);
 console.log(`   ✓ Saved ${initialChats.length} chats to cache`);
 
 // Step 2: Check if cache has chats before first send
 function hasRejectedChats() {
   try {
-    const cache = lino.loadFromCache(CACHE_FILES.VK_CHATS);
+    const cache = lino.loadFromLino(CACHE_FILES.VK_CHATS);
     if (!cache || !cache.numericIds || cache.numericIds.length === 0) {
       return false;
     }
@@ -41,7 +41,7 @@ const exitCode = 0; // Success!
 
 // Simulate what vk-send-telegram-link-to-chats.mjs does on success
 if (exitCode === 0) {
-  lino.saveToCache(CACHE_FILES.VK_CHATS, []);
+  lino.saveAsLino(CACHE_FILES.VK_CHATS, []);
   console.log('   ✓ Cache cleared (simulating success behavior)');
 }
 
@@ -68,7 +68,7 @@ console.log('=' .repeat(60));
 
 // Reset: Simulate rejected chats
 const rejectedChats = [1159, 1158];
-lino.saveToCache(CACHE_FILES.VK_CHATS, rejectedChats);
+lino.saveAsLino(CACHE_FILES.VK_CHATS, rejectedChats);
 console.log(`1. Simulate first send failed with ${rejectedChats.length} rejected chats`);
 const exitCode2 = 1; // Failure
 console.log(`   - exitCode = ${exitCode2}`);
@@ -90,7 +90,7 @@ if (exitCode2 === 0) {
     console.log(`   - Retry completed with exit code ${retryExitCode}`);
 
     if (retryExitCode === 0) {
-      lino.saveToCache(CACHE_FILES.VK_CHATS, []);
+      lino.saveAsLino(CACHE_FILES.VK_CHATS, []);
       console.log('   - Cache cleared (simulating retry success)');
       console.log('   ✅ Should break out of loop');
     }

@@ -3,7 +3,8 @@
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { TelegramUserClient } from './telegram.lib.mjs';
-import { lino, CACHE_FILES } from './lino.lib.mjs';
+import { lino } from "./lino.lib.mjs";
+import { CACHE_FILES } from "./cache-files.mjs";
 
 class TelegramFollower {
   constructor() {
@@ -534,7 +535,7 @@ yargs(hideBin(process.argv))
       coerce: (input) => {
         // If no input provided, try to use cached file
         if (!input) {
-          const cache = lino.requireCache(CACHE_FILES.TELEGRAM_LINKS,
+          const cache = lino.requireFile(CACHE_FILES.TELEGRAM_LINKS,
             'No links provided and cache file not found.\n💡 Run vk-extract-telegram-links.mjs first to create the cache file');
           return cache.stringValues;
         }
@@ -548,7 +549,7 @@ yargs(hideBin(process.argv))
       // Handle case where no argument was provided
       let links = argv.links;
       if (!links) {
-        const cache = lino.requireCache(CACHE_FILES.TELEGRAM_LINKS,
+        const cache = lino.requireFile(CACHE_FILES.TELEGRAM_LINKS,
           'No links provided and cache file not found.\n💡 Run vk-extract-telegram-links.mjs first to create the cache file');
         links = cache.stringValues;
       }

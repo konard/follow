@@ -3,7 +3,8 @@
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { spawn } from 'child_process';
-import { lino, CACHE_FILES } from './lino.lib.mjs';
+import { lino } from './lino.lib.mjs';
+import { CACHE_FILES } from './cache-files.mjs';
 
 class AutoFollower {
   constructor(options = {}) {
@@ -48,7 +49,7 @@ class AutoFollower {
    */
   hasRejectedChats() {
     try {
-      const cache = lino.loadFromCache(CACHE_FILES.VK_CHATS);
+      const cache = lino.loadFromLino(CACHE_FILES.VK_CHATS);
       if (!cache || !cache.numericIds || cache.numericIds.length === 0) {
         return false;
       }
@@ -89,13 +90,28 @@ class AutoFollower {
         '--delete-all-incoming-messages-in-chat-on-success'
       ]);
 
-      // If all messages survived on first attempt, we're done
+      // Exit code 0 means no retries needed (either all survived or all skipped)
+      // Exit code 1 means some messages need retry
       if (exitCode === 0) {
-        console.log('\n🎉 All messages survived on first attempt! No retries needed.');
+        // Read results from cache to display appropriate message
+        const results = lino.loadJsonFromLino(CACHE_FILES.LAST_VK_SEND_RESULT);
+        if (results) {
+          if (results.deleted === 0) {
+            console.log(`\n🎉 All ${results.totalSent} messages survived on first attempt! No retries needed.`);
+          } else if (results.skipped > 0) {
+            console.log(`\n✅ ${results.survived}/${results.totalSent} messages survived, ${results.skipped} skipped. No retries needed.`);
+          }
+        } else {
+          console.log('\n🎉 No retries needed.');
+        }
         console.log('\n' + '='.repeat(60));
         console.log('✅ Auto-Follow Sequence Complete!');
         console.log('='.repeat(60));
         return;
+      } else if (exitCode !== 1) {
+        // Handle unexpected exit codes
+        console.error(`\n⚠️  Unexpected exit code: ${exitCode}`);
+        throw new Error(`vk-send-telegram-link-to-chats.mjs exited with code ${exitCode}`);
       }
 
       // Loop: Repeat steps 2-4 while there are rejected chats
@@ -121,10 +137,25 @@ class AutoFollower {
           '--delete-all-incoming-messages-in-chat-on-success'
         ]);
 
-        // If all messages survived, we're done
+        // Exit code 0 means no retries needed (either all survived or all skipped)
+        // Exit code 1 means some messages need retry
         if (retryExitCode === 0) {
-          console.log('\n🎉 All messages survived! No more rejected chats.');
+          // Read results from cache to display appropriate message
+          const results = lino.loadJsonFromLino(CACHE_FILES.LAST_VK_SEND_RESULT);
+          if (results) {
+            if (results.deleted === 0) {
+              console.log(`\n🎉 All ${results.totalSent} messages survived! No more rejected chats.`);
+            } else if (results.skipped > 0) {
+              console.log(`\n✅ ${results.survived}/${results.totalSent} messages survived, ${results.skipped} skipped. No more rejected chats.`);
+            }
+          } else {
+            console.log('\n🎉 All messages survived! No more rejected chats.');
+          }
           break;
+        } else if (retryExitCode !== 1) {
+          // Handle unexpected exit codes
+          console.error(`\n⚠️  Unexpected exit code: ${retryExitCode}`);
+          throw new Error(`vk-send-telegram-link-to-chats.mjs exited with code ${retryExitCode}`);
         }
 
         iteration++;

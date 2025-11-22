@@ -3,7 +3,8 @@
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { VKClient } from './vk.lib.mjs';
-import { lino, CACHE_FILES } from './lino.lib.mjs';
+import { lino } from "./lino.lib.mjs";
+import { CACHE_FILES } from "./cache-files.mjs";
 
 class VKChatLister {
   constructor() {
@@ -129,7 +130,7 @@ class VKChatLister {
       console.log(lino.format(chatIds));
       
       // Save to cache
-      const cacheFile = lino.saveToCache(CACHE_FILES.VK_CHATS, chatIds);
+      const cacheFile = lino.saveAsLino(CACHE_FILES.VK_CHATS, chatIds);
       console.log(`💾 Saved to cache: ${cacheFile}`);
       
       return chatList;

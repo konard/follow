@@ -3,7 +3,8 @@
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { VKClient } from './vk.lib.mjs';
-import { lino, CACHE_FILES } from './lino.lib.mjs';
+import { lino } from "./lino.lib.mjs";
+import { CACHE_FILES } from "./cache-files.mjs";
 
 class TelegramLinkExtractor {
   constructor() {
@@ -207,7 +208,7 @@ class TelegramLinkExtractor {
       console.log(lino.format(sortedLinks));
       
       // Save to cache
-      const cacheFile = lino.saveToCache(CACHE_FILES.TELEGRAM_LINKS, sortedLinks);
+      const cacheFile = lino.saveAsLino(CACHE_FILES.TELEGRAM_LINKS, sortedLinks);
       console.log(`\n💾 Saved to cache: ${cacheFile}`);
       
       return allLinks;
@@ -232,7 +233,7 @@ yargs(hideBin(process.argv))
       coerce: (input) => {
         // If no input provided, try to use cached file
         if (!input) {
-          const cache = lino.requireCache(CACHE_FILES.VK_CHATS, 
+          const cache = lino.requireFile(CACHE_FILES.VK_CHATS, 
             'No chat IDs provided and cache file not found.\n💡 Run vk-list-chats.mjs first to create the cache file');
           return cache.numericIds;
         }
@@ -245,7 +246,7 @@ yargs(hideBin(process.argv))
     // Handle case where no argument was provided
     let chatIds = argv.chatIds;
     if (!chatIds) {
-      const cache = lino.requireCache(CACHE_FILES.VK_CHATS, 
+      const cache = lino.requireFile(CACHE_FILES.VK_CHATS, 
         'No chat IDs provided and cache file not found.\n💡 Run vk-list-chats.mjs first to create the cache file');
       chatIds = cache.numericIds;
     }
