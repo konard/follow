@@ -336,7 +336,7 @@ yargs(hideBin(process.argv))
     alias: 'l',
     describe: 'Telegram link to send',
     type: 'string',
-    default: 'https://t.me/gptDeep'
+    default: 'https://t.me/link_konard'
   })
   .option('monitor-duration', {
     alias: 'd',
@@ -367,7 +367,7 @@ yargs(hideBin(process.argv))
     default: false
   })
   .help()
-  .example('$0', 'Send https://t.me/gptDeep to cached chats and monitor for 3 minutes')
+  .example('$0', 'Send https://t.me/link_konard to cached chats and monitor for 3 minutes')
   .example('$0 --link https://t.me/myChannel', 'Send custom link to cached chats')
   .example('$0 "1163 1158 1159" --link https://t.me/myChannel', 'Send to specific chats')
   .example('$0 "(1163 1158)" --delay 2', 'Send with 2 second delay between chats')

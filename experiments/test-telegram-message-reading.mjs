@@ -12,7 +12,7 @@
  *   bun run experiments/test-telegram-message-reading.mjs <channel_username>
  *
  * Example:
- *   bun run experiments/test-telegram-message-reading.mjs gptDeep
+ *   bun run experiments/test-telegram-message-reading.mjs link_konard
  */
 
 import { TelegramUserClient } from '../telegram.lib.mjs';
@@ -71,7 +71,7 @@ const channelUsername = process.argv[2];
 
 if (!channelUsername) {
   console.error('❌ Usage: bun run experiments/test-telegram-message-reading.mjs <channel_username>');
-  console.error('   Example: bun run experiments/test-telegram-message-reading.mjs gptDeep');
+  console.error('   Example: bun run experiments/test-telegram-message-reading.mjs link_konard');
   process.exit(1);
 }
 
